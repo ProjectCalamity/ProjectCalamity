@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use noise::{Perlin, NoiseFn};
+use rand::Rng;
 use super::*;
 
 #[derive(Component, Debug, Reflect)]
@@ -12,18 +13,6 @@ pub struct GameboardGenerationParameters {
 }
 
 pub fn generate_gameboard(mut commands: Commands, mut existing: Query<&mut TileInfo>, info: Query<(&Gameboard, &GameboardGenerationParameters)>) {
-
-
-    // TEMPORARILY spawn unit
-    // TODO: Remove this
-
-    commands.spawn(UnitBundle {
-        unit: Unit { id: UnitID::ScienceGenericTest, pos: [2, 2], health: Health(3f32), attack: Attack { base: 2f32, range: 1, splash: false, splash_multiplier: 1f32, magic_multiplier: 1f32, science_multiplier: 1f32 }, defense: Defense { base: 3f32, magic_multiplier: 1f32, science_multiplier: 1f32 }, movement: Movement(1), turn_execute_stage: TurnExecuteStage(TurnExecuteStages::MidTurn), archetype: Archetype(Archetypes::Science) },
-    });
-
-    commands.spawn(UnitBundle {
-        unit: Unit { id: UnitID::MagicGenericTest, pos: [4, 2], health: Health(3f32), attack: Attack { base: 2f32, range: 1, splash: false, splash_multiplier: 1f32, magic_multiplier: 1f32, science_multiplier: 1f32 }, defense: Defense { base: 3f32, magic_multiplier: 1f32, science_multiplier: 1f32 }, movement: Movement(1), turn_execute_stage: TurnExecuteStage(TurnExecuteStages::MidTurn), archetype: Archetype(Archetypes::Science) },
-    });
 
     if existing.iter().len() == 0 {
 
@@ -71,7 +60,21 @@ pub fn generate_gameboard(mut commands: Commands, mut existing: Query<&mut TileI
                 commands.spawn(TileInfo {
                     pos: [x as i32, y as i32],
                     geography: terrain,
-                });
+                }).insert(Name::new(format!("Tile at [{:?}, {:?}]", x, y)));
+
+                let n = rand::thread_rng().gen_range(0..40);
+
+                if n == 0 || n == 1 {
+                    // 0 is scrapyard, 1 is ancient library.
+                    let tf: TileFeature;
+                    if n == 0 {
+                        tf = TileFeature { pos: [x as i32, y as i32], feature: TileFeatures::CurrencySite(Archetype(Archetypes::Science)) };
+                    } else {
+                        tf = TileFeature { pos: [x as i32, y as i32], feature: TileFeatures::CurrencySite(Archetype(Archetypes::Magic)) };
+                    }
+                    commands.spawn(tf)
+                        .insert(Name::new(format!("Tile Feature at [{:?}, {:?}]", x, y)));
+                }
             }
         }
     } else {

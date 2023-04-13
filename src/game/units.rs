@@ -5,7 +5,7 @@ use super::*;
     Organised by archaetype -> class -> path -> tier
 */
 
-#[derive(Debug, Default, FromReflect, Reflect)]
+#[derive(Debug, Default, FromReflect, PartialEq, Reflect)]
 pub enum UnitID {
     #[default]
     ScienceGenericTest,

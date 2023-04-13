@@ -1,9 +1,9 @@
 pub mod units;
-mod terrain;
+mod gameboard_gen;
 
 use bevy::prelude::*;
 
-use self::{units::UnitID, terrain::{generate_gameboard, GameboardGenerationParameters}};
+use self::{units::UnitID, gameboard_gen::{generate_gameboard, GameboardGenerationParameters}};
 pub struct GamePlaygroundPlugin;
 
 impl Plugin for GamePlaygroundPlugin {
@@ -16,10 +16,12 @@ impl Plugin for GamePlaygroundPlugin {
             .register_type::<GameboardGenerationParameters>()
             .register_type::<Health>()
             .register_type::<Movement>()
+            .register_type::<TileFeature>()
             .register_type::<TileInfo>()
             .register_type::<TurnExecuteStage>()
             .register_type::<Unit>()
-            .add_system(generate_gameboard);
+            .add_system(generate_gameboard)
+            .add_system(calculate_traversable_tiles);
     }
 }
 
@@ -46,61 +48,61 @@ Finally we return gamestate
 */
 
 // I'll write this as a normal fn for now, and deal with Bevy's shitfuckery later
-fn execute_move(mut commands: Commands, tiles: Query<(Entity, &mut TileInfo, Option<&mut Unit>)>, actions: Query<(Entity, &UnitAction)>) {
+// fn execute_move(mut commands: Commands, tiles: Query<(Entity, &mut TileInfo, Option<&mut Unit>)>, actions: Query<(Entity, &UnitAction)>) {
 
-    // We literally don't even have the components to perform a single move...
-    if tiles.iter().len() < 2 || actions.iter().len() < 1 {
-        return;
-    }
+//     // We literally don't even have the components to perform a single move...
+//     if tiles.iter().len() < 2 || actions.iter().len() < 1 {
+//         return;
+//     }
 
-    // PRE-TURN - movements, some attacks
-    actions.iter().for_each(|(entity, action)| {
-        // Input sanitisation? Never met her.
-        // Move out of the fucking board. I dare you. I double dare you. I TRIPLE dare you.
-        // TODO: refine distence calcs
+//     // PRE-TURN - movements, some attacks
+//     actions.iter().for_each(|(entity, action)| {
+//         // Input sanitisation? Never met her.
+//         // Move out of the fucking board. I dare you. I double dare you. I TRIPLE dare you.
+//         // TODO: refine distence calcs
 
-        let binding_one = tiles
-            .iter()
-            .filter(|(_e, t, _u)| t.pos[0] == action.action_pos[0] && t.pos[1] == action.action_pos[1])
-            .collect::<Vec<(Entity, &TileInfo, Option<&Unit>)>>();
-        let act_t = binding_one
-            .get(0)
-            .unwrap();
-        let binding_two = tiles
-            .iter()
-            .filter(|(_e, t, _u)| t.pos[0] == action.curr_pos[0] && t.pos[1] == action.curr_pos[1])
-            .collect::<Vec<(Entity, &TileInfo, Option<&Unit>)>>();
-        let curr_t = binding_two
-            .get(0)
-            .unwrap();
-        let dist = (action.action_pos[0] - action.curr_pos[0]).abs() + (action.action_pos[1] - action.curr_pos[1]).abs();
-        // STEP 1: Check
-        if action.action_type == UnitActions::Move {
-            if let Some(unit) = curr_t.2 {
-                if dist > unit.movement.0 {
-                    // This is what happens when you don't read my code comments.
-                    // *Stay inside the board*
-                    return;
-                }
-                else {
-                // Move.
-                    commands.entity(curr_t.0).remove::<Unit>();
-                    commands.entity(act_t.0).insert(Unit {
-                        ..Default::default()
-                    });
-                }
-            }
-            else {
-                return
-            }
-        }
-    // TODO: Handle other types
-    // (Attack, Heal and Build)
+//         let binding_one = tiles
+//             .iter()
+//             .filter(|(_e, t, _u)| t.pos[0] == action.action_pos[0] && t.pos[1] == action.action_pos[1])
+//             .collect::<Vec<(Entity, &TileInfo, Option<&Unit>)>>();
+//         let act_t = binding_one
+//             .get(0)
+//             .unwrap();
+//         let binding_two = tiles
+//             .iter()
+//             .filter(|(_e, t, _u)| t.pos[0] == action.curr_pos[0] && t.pos[1] == action.curr_pos[1])
+//             .collect::<Vec<(Entity, &TileInfo, Option<&Unit>)>>();
+//         let curr_t = binding_two
+//             .get(0)
+//             .unwrap();
+//         let dist = (action.action_pos[0] - action.curr_pos[0]).abs() + (action.action_pos[1] - action.curr_pos[1]).abs();
+//         // STEP 1: Check
+//         if action.action_type == UnitActions::Move {
+//             if let Some(unit) = curr_t.2 {
+//                 if dist > unit.movement.0 {
+//                     // This is what happens when you don't read my code comments.
+//                     // *Stay inside the board*
+//                     return;
+//                 }
+//                 else {
+//                 // Move.
+//                     commands.entity(curr_t.0).remove::<Unit>();
+//                     commands.entity(act_t.0).insert(Unit {
+//                         ..Default::default()
+//                     });
+//                 }
+//             }
+//             else {
+//                 return
+//             }
+//         }
+//     // TODO: Handle other types
+//     // (Attack, Heal and Build)
 
-        commands.entity(entity).remove::<UnitAction>();
-    })
+//         commands.entity(entity).remove::<UnitAction>();
+//     })
 
-}
+// }
 
 // ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 // ;;                                                                            ;;
@@ -149,6 +151,27 @@ fn exec_action(mut commands: Commands, action: &UnitAction, tiles: Query<(Entity
 }
  */
 
+fn calculate_traversable_tiles(
+    mut commands: Commands,
+    unit_q: Query<(Entity, &Unit)>,
+    tiles_q: Query<&TileInfo>
+) {
+    unit_q.iter().for_each(|(e, u)| {
+
+        let mut reachable_tiles = Vec::<[i32; 2]>::new();
+
+        tiles_q.iter().for_each(|t| {
+            // TODO: Improve searching algorithm
+            if (u.pos[0] - t.pos[0]).abs() + (u.pos[1] - t.pos[1]).abs() <= u.movement.0 {
+                reachable_tiles.push(t.pos.clone());
+            }
+        });
+        commands.entity(e).insert(TraversableTiles(reachable_tiles));
+    })
+}
+
+#[derive(Component, FromReflect, Reflect)]
+pub struct TraversableTiles(pub Vec<[i32; 2]>);
 
 #[derive(Component, Reflect)]
 pub struct Gameboard {
@@ -192,8 +215,8 @@ enum UnitActions {
 }
 
 #[derive(Bundle, Default, Reflect, FromReflect)]
-struct UnitBundle {
-    unit: Unit,
+pub struct UnitBundle {
+    pub unit: Unit,
 }
 
 #[derive(Component, Debug, Default, Reflect, FromReflect)]
@@ -209,44 +232,44 @@ pub struct Unit {
 }
 
 #[derive(Component, Debug, Default, FromReflect, Reflect)]
-pub struct Health(f32);
+pub struct Health(pub f32);
 
 #[derive(Component, Debug, Default, FromReflect, Reflect)]
 pub struct Attack {
-    base: f32,
-    range: i32,
-    splash: bool, // (0.3 * base) per adjacent unit
-    splash_multiplier: f32,
-    magic_multiplier: f32,
-    science_multiplier: f32,
+    pub base: f32,
+    pub range: i32,
+    pub splash: bool, // (0.3 * base) per adjacent unit
+    pub splash_multiplier: f32,
+    pub magic_multiplier: f32,
+    pub science_multiplier: f32,
 }
 
 #[derive(Component, Debug, Default, FromReflect, Reflect)]
 pub struct Defense {
-    base: f32,
-    magic_multiplier: f32,
-    science_multiplier: f32,
+    pub base: f32,
+    pub magic_multiplier: f32,
+    pub science_multiplier: f32,
 }
 
 #[derive(Component, Debug, Default, FromReflect, Reflect)]
-pub struct Movement(i32);
+pub struct Movement(pub i32);
 
 #[derive(Component, Debug, Default, FromReflect, PartialEq, Reflect)]
-pub struct TurnExecuteStage(TurnExecuteStages);
+pub struct TurnExecuteStage(pub TurnExecuteStages);
 
 #[derive(Component, Debug, Default, FromReflect, PartialEq, Reflect)]
-enum TurnExecuteStages {
+pub enum TurnExecuteStages {
     PreTurn,
     #[default]
     MidTurn,
     AfterTurn,
 }
 
-#[derive(Component, Debug, Default, Reflect, FromReflect)]
-pub struct Archetype(Archetypes);
+#[derive(Component, Debug, Default, PartialEq, Reflect, FromReflect)]
+pub struct Archetype(pub Archetypes);
 
 #[derive(Component, Debug, Default, FromReflect, PartialEq, Reflect)]
-enum Archetypes {
+pub enum Archetypes {
     Magic,
     Science,
     #[default]
@@ -258,4 +281,25 @@ struct HealAction {
     base: f32,
     splash: bool, // (0.3 * base) per adjacent unit
     range: i32,
+}
+
+#[derive(Component, Debug, FromReflect, PartialEq, Reflect)]
+pub struct TileFeature {
+    pub pos: [i32; 2],
+    pub feature: TileFeatures
+}
+
+#[derive(Component, Debug, FromReflect, PartialEq, Reflect)]
+pub enum TileFeatures {
+    CurrencySite(Archetype),
+    Nest(PlayerTeam)
+}
+
+#[derive(Debug, FromReflect, PartialEq, Reflect)]
+pub struct PlayerTeam(pub TeamColour);
+
+#[derive(Debug, FromReflect, PartialEq, Reflect)]
+pub enum TeamColour {
+    Blue,
+    Red
 }
