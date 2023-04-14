@@ -1,0 +1,3 @@
+[configuration]
+# Can be "server" or "client"
+environment = "client_debug"

@@ -1,6 +1,6 @@
 use bevy::{prelude::*, input::mouse::{MouseWheel, MouseMotion}};
 
-use crate::game::{Unit, TileInfo, Gameboard, TraversableTiles};
+use crate::common::logic::{Unit, TileInfo, Gameboard, TraversableTiles};
 
 use super::{CameraScalingInfo, Icon, Icons, Scalable, RenderedIcon};
 

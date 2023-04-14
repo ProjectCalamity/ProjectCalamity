@@ -1,12 +1,12 @@
 pub mod units;
-mod gameboard_gen;
+pub mod gameboard_gen;
 
 use bevy::prelude::*;
 
 use self::{units::UnitID, gameboard_gen::{generate_gameboard, GameboardGenerationParameters}};
-pub struct GamePlaygroundPlugin;
+pub struct GameLogicPlugin;
 
-impl Plugin for GamePlaygroundPlugin {
+impl Plugin for GameLogicPlugin {
     fn build(&self, app: &mut App) {
         app
             .register_type::<Archetype>()

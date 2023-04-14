@@ -1,5 +1,5 @@
 [package]
-name = "pc_vis_test"
+name = "project_calamity"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,3 +10,4 @@ bevy = "0.10.0"
 bevy-inspector-egui = "0.18.1"
 noise = "0.8.2"
 rand = "0.8.5"
+toml = "0.7.3"

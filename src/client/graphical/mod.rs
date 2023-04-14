@@ -4,13 +4,13 @@ mod inputs;
 use bevy::prelude::*;
 use rand::Rng;
 
-use crate::game::{*, units::UnitID};
+use crate::common::logic::{*, units::UnitID};
 
 use self::{sprites::{load_sprites, Spritesheet}, inputs::{ZoomEvent, scroll_events, zoom_camera, PanEvent, mouse_pan_events, scroll_camera, mouse_click_events, GridPosClickEvent, select_unit, GridBounds}};
 
-pub struct VisualPlaygroundPlugin;
+pub struct GraphicalPlugin;
 
-impl Plugin for VisualPlaygroundPlugin {
+impl Plugin for GraphicalPlugin {
     fn build(&self, app: &mut App) {
         app
             .register_type::<CameraScalingInfo>()
