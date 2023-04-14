@@ -373,7 +373,7 @@ fn spawn_camera(mut commands: Commands) {
     // TODO: Remove this
 
     commands.spawn(UnitBundle {
-        unit: Unit { id: UnitID::ScienceGenericTest, pos: [2, 2], health: Health(3f32), attack: Attack { base: 2f32, range: 1, splash: false, splash_multiplier: 1f32, magic_multiplier: 1f32, science_multiplier: 1f32 }, defense: Defense { base: 3f32, magic_multiplier: 1f32, science_multiplier: 1f32 }, movement: Movement(1), turn_execute_stage: TurnExecuteStage(TurnExecuteStages::MidTurn), archetype: Archetype(Archetypes::Science) },
+        unit: Unit { id: UnitID::ScienceGenericTest, pos: [2, 2], health: Health(3f32), attack: Attack { base: 2f32, range: 1, splash: false, splash_multiplier: 1f32, magic_multiplier: 1f32, science_multiplier: 1f32 }, defense: Defense { base: 3f32, magic_multiplier: 1f32, science_multiplier: 1f32 }, movement: Movement(3), turn_execute_stage: TurnExecuteStage(TurnExecuteStages::MidTurn), archetype: Archetype(Archetypes::Science) },
     });
 
     commands.spawn(UnitBundle {

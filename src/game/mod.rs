@@ -162,7 +162,9 @@ fn calculate_traversable_tiles(
 
         tiles_q.iter().for_each(|t| {
             // TODO: Improve searching algorithm
-            if (u.pos[0] - t.pos[0]).abs() + (u.pos[1] - t.pos[1]).abs() <= u.movement.0 {
+            if ((u.pos[0] - t.pos[0]).abs() + (u.pos[1] - t.pos[1]).abs() <= u.movement.0) 
+                && u.pos != t.pos
+            {
                 reachable_tiles.push(t.pos.clone());
             }
         });
