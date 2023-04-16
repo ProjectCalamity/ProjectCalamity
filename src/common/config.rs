@@ -5,7 +5,8 @@ use toml::Table;
 
 #[derive(Debug, Default)]
 pub struct Config {
-    pub env: RunEnvironment
+    pub env: RunEnvironment,
+    pub debug: bool
 }
 
 impl Config {
@@ -15,13 +16,20 @@ impl Config {
 
         match fs::read_to_string("./config.toml") {
             Ok(conf_str) => {
-                let conf_toml = conf_str.parse::<Table>().unwrap();
+                let toml = conf_str.parse::<Table>().unwrap();
+                let conf_toml = &toml["configuration"];
                 
                 // Environment
-                match conf_toml["configuration"]["environment"].as_str() {
+                match conf_toml["environment"].as_str() {
                     Some("client") => {config.env = RunEnvironment::Client},
-                    Some("client_debug") => {config.env = RunEnvironment::ClientDebug}
                     Some("server") => {config.env = RunEnvironment::Server},
+                    _ => {warn!("Unable to read environment due to an invalid character sequence. Continuing with default values.")}
+                }
+
+                // Debug
+                match conf_toml["debug"].as_str() {
+                    Some("true") => {config.debug = true},
+                    Some("false") => {config.debug = false},
                     _ => {warn!("Unable to read environment due to an invalid character sequence. Continuing with default values.")}
                 }
             },
@@ -39,6 +47,5 @@ impl Config {
 pub enum RunEnvironment {
     #[default]
     Client,
-    ClientDebug,
     Server
 }

@@ -1,4 +1,4 @@
-mod sprites;
+pub mod load_assets;
 mod inputs;
 
 use bevy::prelude::*;
@@ -6,7 +6,9 @@ use rand::Rng;
 
 use crate::common::logic::{*, units::UnitID};
 
-use self::{sprites::{load_sprites, Spritesheet}, inputs::{ZoomEvent, scroll_events, zoom_camera, PanEvent, mouse_pan_events, scroll_camera, mouse_click_events, GridPosClickEvent, select_unit, GridBounds}};
+use self::{load_assets::{load_sprites, Spritesheet, Fonts, load_fonts}, inputs::{ZoomEvent, scroll_events, zoom_camera, PanEvent, mouse_pan_events, scroll_camera, mouse_click_events, GridPosClickEvent, select_unit}};
+
+use super::ClientState;
 
 pub struct GraphicalPlugin;
 
@@ -15,27 +17,26 @@ impl Plugin for GraphicalPlugin {
         app
             .register_type::<CameraScalingInfo>()
             .init_resource::<Spritesheet>()
+            .init_resource::<Fonts>()
             .add_event::<PanEvent>()
             .add_event::<ZoomEvent>()
             .add_event::<GridPosClickEvent>()
             .add_startup_system(load_sprites)
+            .add_startup_system(load_fonts)
             .add_startup_system(spawn_camera)
-            .add_system(render_terrain)
-            .add_system(render_features)
-            .add_system(render_units)
-            .add_system(render_icons)
-            .add_system(update_transforms)
-            .add_systems((conform_transforms_tiles, conform_transforms_units, conform_transforms_features, conform_transforms_icons).after(update_transforms))
-            .add_system(scroll_events)
-            .add_system(select_unit)
-            .add_system(zoom_camera)
-            .add_system(mouse_click_events)
-            .add_system(mouse_pan_events)
-            .add_system(scroll_camera);
+            .add_system(setup_scaling.in_schedule(OnEnter(ClientState::Game)))
+            .add_systems((render_terrain, render_features, render_units, render_icons).in_set(OnUpdate(ClientState::Game)))
+            .add_systems((conform_transforms_tiles, conform_transforms_units, conform_transforms_features, conform_transforms_icons).after(update_transforms).in_set(OnUpdate(ClientState::Game)))
+            .add_system(scroll_events.in_set(OnUpdate(ClientState::Game)))
+            .add_system(select_unit.in_set(OnUpdate(ClientState::Game)))
+            .add_system(zoom_camera.in_set(OnUpdate(ClientState::Game)))
+            .add_system(mouse_click_events.in_set(OnUpdate(ClientState::Game)))
+            .add_system(mouse_pan_events.in_set(OnUpdate(ClientState::Game)))
+            .add_system(scroll_camera.in_set(OnUpdate(ClientState::Game)));
     }
 }
 
-#[derive(Component, Reflect)]
+#[derive(Component, Debug, Reflect)]
 pub struct CameraScalingInfo {
     x_scl: f32,
     y_scl: f32,
@@ -353,24 +354,21 @@ fn conform_transforms_icons(
 #[derive(Component, Reflect)]
 struct Scalable;
 
-fn spawn_camera(mut commands: Commands) {
-    let cam = Camera2dBundle::default();
-    let x_scl = cam.projection.area.max.x - cam.projection.area.min.x;
-    let y_scl = cam.projection.area.max.y - cam.projection.area.min.y;
+fn setup_scaling(mut commands: Commands, orth_q: Query<(Entity, &OrthographicProjection)>) {
+    let orth = orth_q.single().1;
+    let x_scl = orth.area.max.x - orth.area.min.x;
+    let y_scl = orth.area.max.y - orth.area.min.y;
     let unit_scl = f32::min(x_scl, y_scl);
+    
+    // TEMPORARILY spawn unit
+    // TODO: Remove this
 
-    commands.spawn(cam).insert(CameraScalingInfo {
+    commands.entity(orth_q.single().0).insert(CameraScalingInfo {
         x_scl: x_scl,
         y_scl: y_scl,
         unit_scl: unit_scl,
         unit_delta: 1f32,
-    }).insert(GridBounds {
-        position: Vec2::splat(0f32),
-        size: Vec2::splat(unit_scl),
     });
-
-    // TEMPORARILY spawn unit
-    // TODO: Remove this
 
     commands.spawn(UnitBundle {
         unit: Unit { id: UnitID::ScienceGenericTest, pos: [2, 2], health: Health(3f32), attack: Attack { base: 2f32, range: 1, splash: false, splash_multiplier: 1f32, magic_multiplier: 1f32, science_multiplier: 1f32 }, defense: Defense { base: 3f32, magic_multiplier: 1f32, science_multiplier: 1f32 }, movement: Movement(3), turn_execute_stage: TurnExecuteStage(TurnExecuteStages::MidTurn), archetype: Archetype(Archetypes::Science) },
@@ -379,4 +377,9 @@ fn spawn_camera(mut commands: Commands) {
     commands.spawn(UnitBundle {
         unit: Unit { id: UnitID::MagicGenericTest, pos: [4, 2], health: Health(3f32), attack: Attack { base: 2f32, range: 1, splash: false, splash_multiplier: 1f32, magic_multiplier: 1f32, science_multiplier: 1f32 }, defense: Defense { base: 3f32, magic_multiplier: 1f32, science_multiplier: 1f32 }, movement: Movement(1), turn_execute_stage: TurnExecuteStage(TurnExecuteStages::MidTurn), archetype: Archetype(Archetypes::Science) },
     });
+}
+
+fn spawn_camera(mut commands: Commands) {
+    let cam = Camera2dBundle::default();
+    commands.spawn(cam);
 }

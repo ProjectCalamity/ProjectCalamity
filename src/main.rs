@@ -5,34 +5,32 @@ mod server;
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use common::{logic::GameLogicPlugin, config::{Config, RunEnvironment}};
-use client::graphical::GraphicalPlugin;
+use client::{graphical::GraphicalPlugin, ClientState, menus::MenusPlugin};
 
 fn main() {
 
     let config = Config::load();
 
+    let mut app = App::new();
     // Server startup
     match config.env {
         RunEnvironment::Client => {
-            App::new()
+            app
                 .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+                .add_state::<ClientState>()
+                .add_plugin(MenusPlugin)
                 .add_plugin(GameLogicPlugin)
                 .add_plugin(GraphicalPlugin)
-                .run();
-        },
-        RunEnvironment::ClientDebug => {
-            App::new()
-                .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
-                .add_plugin(WorldInspectorPlugin::default())
-                .add_plugin(GameLogicPlugin)
-                .add_plugin(GraphicalPlugin)
-                .run();
         },
         RunEnvironment::Server => {
-            App::new()
+            app
                 .add_plugin(GameLogicPlugin)
-                .run();
-
         },
     };
+
+    if config.debug {
+        app.add_plugin(WorldInspectorPlugin::default());
+    }
+
+    app.run();
 }

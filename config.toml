@@ -1,3 +1,5 @@
 [configuration]
-# Can be "server" or "client"
-environment = "client_debug"
+# Can be "server", "client"
+environment = "client"
+# Can be "true" or "false"
+debug = "true"
