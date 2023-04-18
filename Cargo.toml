@@ -8,6 +8,8 @@ edition = "2021"
 [dependencies]
 bevy = "0.10.0"
 bevy-inspector-egui = "0.18.1"
+bevy_quinnet = "0.4.0"
 noise = "0.8.2"
 rand = "0.8.5"
+serde = "1.0.160"
 toml = "0.7.3"

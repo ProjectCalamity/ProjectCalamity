@@ -2,8 +2,11 @@ pub mod units;
 pub mod gameboard_gen;
 
 use bevy::prelude::*;
+use serde::{Serialize, Deserialize};
 
-use self::{units::UnitID, gameboard_gen::{generate_gameboard, GameboardGenerationParameters}};
+use self::{units::UnitID, gameboard_gen::GameboardGenerationParameters};
+
+use super::networking::schema::PlayerTileInfo;
 pub struct GameLogicPlugin;
 
 impl Plugin for GameLogicPlugin {
@@ -20,7 +23,6 @@ impl Plugin for GameLogicPlugin {
             .register_type::<TileInfo>()
             .register_type::<TurnExecuteStage>()
             .register_type::<Unit>()
-            .add_system(generate_gameboard)
             .add_system(calculate_traversable_tiles);
     }
 }
@@ -186,13 +188,31 @@ pub struct Gameboard {
 pub struct TileInfo {
     pub pos: [i32; 2],
     pub geography: Geography,
+    pub visible_to_players: Vec<PlayerTeam>,
 }
 
-#[derive(Debug, FromReflect, PartialEq, Reflect)]
+impl TileInfo {
+    pub fn player_tile_info(&self, player: PlayerTeam, feature: TileFeature) -> PlayerTileInfo {
+        let mut geography = Geography::Fog;
+        if self.visible_to_players.contains(&player) {
+            geography = self.geography;
+        }
+        let mut visible_features = None;
+        if feature.feature != TileFeatures::CurrencySite(Archetype(Archetypes::Science)) && feature.feature != TileFeatures::CurrencySite(Archetype(Archetypes::Magic)) {
+            visible_features = Some(feature);
+        } else if feature.visible_to_players.contains(&player) {
+            visible_features = Some(feature);
+        }
+        return PlayerTileInfo { geography: geography, pos: self.pos, visible_features: visible_features };
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
 pub enum Geography {
     None,
     Water,
-    Mountains
+    Mountains,
+    Fog
 }
 
 #[derive(Bundle, Reflect)]
@@ -200,16 +220,16 @@ struct UnitActionBundle{
     unit_action: UnitAction,
 }
 
-#[derive(Component, Debug, Reflect)]
-struct UnitAction {
+#[derive(Clone, Component, Debug, Deserialize, Reflect, Serialize)]
+pub struct UnitAction {
     action_type: UnitActions,
     turn_stage: TurnExecuteStage,
     curr_pos: [i32; 2],
     action_pos: [i32; 2]
 }
 
-#[derive(Debug, Reflect, PartialEq)]
-enum UnitActions {
+#[derive(Clone, Debug, Deserialize, Reflect, PartialEq, Serialize)]
+pub enum UnitActions {
     Move,
     Attack,
     Heal,
@@ -221,7 +241,7 @@ pub struct UnitBundle {
     pub unit: Unit,
 }
 
-#[derive(Component, Debug, Default, Reflect, FromReflect)]
+#[derive(Clone, Component, Debug, Default, Deserialize, Reflect, FromReflect, Serialize)]
 pub struct Unit {
     pub id: UnitID,
     pub pos: [i32; 2],
@@ -233,10 +253,10 @@ pub struct Unit {
     pub archetype: Archetype,
 }
 
-#[derive(Component, Debug, Default, FromReflect, Reflect)]
+#[derive(Clone, Component, Debug, Default, Deserialize, FromReflect, Reflect, Serialize)]
 pub struct Health(pub f32);
 
-#[derive(Component, Debug, Default, FromReflect, Reflect)]
+#[derive(Clone, Component, Debug, Default, Deserialize, FromReflect, Reflect, Serialize)]
 pub struct Attack {
     pub base: f32,
     pub range: i32,
@@ -246,20 +266,20 @@ pub struct Attack {
     pub science_multiplier: f32,
 }
 
-#[derive(Component, Debug, Default, FromReflect, Reflect)]
+#[derive(Clone, Component, Debug, Default, Deserialize, FromReflect, Reflect, Serialize)]
 pub struct Defense {
     pub base: f32,
     pub magic_multiplier: f32,
     pub science_multiplier: f32,
 }
 
-#[derive(Component, Debug, Default, FromReflect, Reflect)]
+#[derive(Clone, Component, Debug, Default, Deserialize, FromReflect, Reflect, Serialize)]
 pub struct Movement(pub i32);
 
-#[derive(Component, Debug, Default, FromReflect, PartialEq, Reflect)]
+#[derive(Clone, Component, Debug, Default, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
 pub struct TurnExecuteStage(pub TurnExecuteStages);
 
-#[derive(Component, Debug, Default, FromReflect, PartialEq, Reflect)]
+#[derive(Clone, Component, Debug, Default, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
 pub enum TurnExecuteStages {
     PreTurn,
     #[default]
@@ -267,10 +287,10 @@ pub enum TurnExecuteStages {
     AfterTurn,
 }
 
-#[derive(Component, Debug, Default, PartialEq, Reflect, FromReflect)]
+#[derive(Clone, Component, Debug, Default, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
 pub struct Archetype(pub Archetypes);
 
-#[derive(Component, Debug, Default, FromReflect, PartialEq, Reflect)]
+#[derive(Clone, Component, Debug, Default, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
 pub enum Archetypes {
     Magic,
     Science,
@@ -285,23 +305,38 @@ struct HealAction {
     range: i32,
 }
 
-#[derive(Component, Debug, FromReflect, PartialEq, Reflect)]
+#[derive(Clone, Component, Debug, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
 pub struct TileFeature {
     pub pos: [i32; 2],
-    pub feature: TileFeatures
+    pub feature: TileFeatures,
+    pub visible_to_players: Vec<PlayerTeam>
 }
 
-#[derive(Component, Debug, FromReflect, PartialEq, Reflect)]
+#[derive(Clone, Component, Debug, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
 pub enum TileFeatures {
     CurrencySite(Archetype),
     Nest(PlayerTeam)
 }
 
-#[derive(Debug, FromReflect, PartialEq, Reflect)]
+#[derive(Clone, Component, Debug, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
 pub struct PlayerTeam(pub TeamColour);
 
-#[derive(Debug, FromReflect, PartialEq, Reflect)]
+#[derive(Clone, Debug, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
 pub enum TeamColour {
     Blue,
-    Red
+    Red,
+    Purple,
+    Yellow
+}
+
+impl TeamColour {
+    pub fn from_int(index: &usize) -> TeamColour {
+        return match index {
+            0 => TeamColour::Blue,
+            1 => TeamColour::Red,
+            2 => TeamColour::Purple,
+            3 => TeamColour::Yellow,
+            _ => TeamColour::Blue,
+        };
+    }
 }

@@ -1,12 +1,27 @@
 use std::fs;
 
-use bevy::prelude::warn;
+use bevy::prelude::{warn, Resource};
 use toml::Table;
 
-#[derive(Debug, Default)]
+
+#[derive(Debug, Default, Resource)]
 pub struct Config {
     pub env: RunEnvironment,
-    pub debug: bool
+    pub debug: bool,
+    // TODO: Remove this!
+    pub connection_address: String,
+    pub server_config: Option<ServerConfig>,
+    pub client_config: Option<ClientConfig>
+}
+
+#[derive(Debug, Default, Resource)]
+pub struct ServerConfig {
+    pub max_players: u32,
+}
+
+#[derive(Debug, Default, Resource)]
+pub struct ClientConfig {
+    pub username: String
 }
 
 impl Config {
@@ -32,6 +47,33 @@ impl Config {
                     Some("false") => {config.debug = false},
                     _ => {warn!("Unable to read environment due to an invalid character sequence. Continuing with default values.")}
                 }
+                let conn_adr = conf_toml["connection_address"].to_string();
+
+                // Oh that's some painful shit, yes daddy
+                config.connection_address = conn_adr.split_at(1).1.split_at(conn_adr.len() - 2).0.to_string();
+
+                if config.env == RunEnvironment::Server {
+
+                    let mut server_conf = ServerConfig::default();
+
+                    let conf_toml_server = &toml["server"];
+                    let mut players = conf_toml_server["max_players"].as_integer().unwrap() as u32;
+                    if players > 4 {
+                        players = 4
+                    } else if players < 2{
+                        players = 2
+                    }
+                    
+                    server_conf.max_players = players;
+                    config.server_config = Some(server_conf);
+                } else if config.env == RunEnvironment::Client {
+
+                    let mut client_conf = ClientConfig::default();
+
+                    let conf_toml_client = &toml["client"];
+                    client_conf.username = conf_toml_client["username"].as_str().unwrap().to_string();
+                    config.client_config = Some(client_conf);
+                }
             },
             Err(err) => {
                 warn!("Unable to read config data [{:?}]. Continuing with default values.", err);
@@ -43,7 +85,7 @@ impl Config {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub enum RunEnvironment {
     #[default]
     Client,

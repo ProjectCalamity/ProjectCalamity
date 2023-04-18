@@ -3,3 +3,13 @@
 environment = "client"
 # Can be "true" or "false"
 debug = "true"
+# Address to start endpoint, or to conect to depending on environment
+connection_address = "127.0.0.1:2360"
+username = "AuroraAlt"
+
+[server]
+# Must be between 2 and 3
+max_players = 2
+
+[client]
+username = "Aurora"

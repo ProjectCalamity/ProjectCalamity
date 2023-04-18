@@ -125,6 +125,7 @@ fn texture_index_from_geography(geo: &Geography) -> usize {
         Geography::None => rng.gen_range(0..3),
         Geography::Water => rng.gen_range(8..11),
         Geography::Mountains => rng.gen_range(4..7),
+        Geography::Fog => rng.gen_range(8..11)
     };
 }
 
