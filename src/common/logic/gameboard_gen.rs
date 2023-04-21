@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use noise::{Perlin, NoiseFn};
 use rand::Rng;
-use crate::{common::networking::schema::Player, server::GameboardGeneratedEvent};
+use crate::{common::networking::schema::Player,};
 
 use super::*;
 
@@ -18,7 +18,6 @@ pub fn generate_gameboard(
     mut commands: Commands, 
     existing: Query<&mut TileInfo>, 
     players: Query<(&Player, &PlayerTeam)>,
-    mut gg_evw: EventWriter<GameboardGeneratedEvent>
 ) {
     if existing.iter().len() == 0 && players.iter().len() > 0 {
         info!("Generating gameboard");
@@ -113,18 +112,14 @@ pub fn generate_gameboard(
                 }
             ).insert(Name::new(format!("Nest at [{:?}, {:?}]", pos[0], pos[1])));
         }
-
-        gg_evw.send(GameboardGeneratedEvent);
-
-
     }
 }
 
 fn calculate_nest_positions(max_x: u32, max_y: u32, n: u32) -> Vec<(u32, u32)> {
     match n {
-        2 => return vec![(1, max_y - 1), (max_x - 1, 1)],
-        3 => return vec![(1, max_y - 1), (max_x - 1, max_y - 1), ((max_x / 2) as u32, 1)],
-        4 => return vec![(1, 1), (1, max_y - 1), (max_x - 1, 1), (max_x - 1, max_y - 1)],
-        _ => return vec![(1, 1), (1, max_y - 1), (max_x - 1, 1), (max_x - 1, max_y - 1)],
+        2 => return vec![(1, max_y - 2), (max_x - 2, 1)],
+        3 => return vec![(1, max_y - 2), (max_x - 2, max_y - 2), ((max_x / 2) as u32, 1)],
+        4 => return vec![(1, 1), (1, max_y - 2), (max_x - 2, 1), (max_x - 2, max_y - 2)],
+        _ => return vec![(1, 1), (1, max_y - 2), (max_x - 2, 1), (max_x - 2, max_y - 2)],
     }
 }

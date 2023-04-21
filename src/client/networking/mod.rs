@@ -44,7 +44,7 @@ fn handle_server_messages(mut commands: Commands, mut client: ResMut<Client>, pl
                 // TODO: Spawn units and players
             }
             ServerMessages::PlayerTileInfoPacket { tile } => {
-                info!("Recieved tile info from server.");
+                info!("Recieved tile info from server {:?}", tile);
                 // Tile
                 commands.spawn(TileInfo { pos: tile.pos, geography: tile.geography, visible_to_players: Vec::new() })
                         .insert(Name::new(format!("Tile at ({:?})", tile.pos))); // For rendering purposes, we can ignore visible_to_players
@@ -64,6 +64,10 @@ fn handle_server_messages(mut commands: Commands, mut client: ResMut<Client>, pl
                 client.connection().send_message(ClientMessages::ConnectionPacket { player: player.single().clone() }).unwrap();
             },
             ServerMessages::DisconnectionPacket { message } => info!("Disconnected from server: {:?}", message),
+            ServerMessages::TestPacket { message, tile_info } => {
+                info!("Recieved test packet containing {:?} AND {:?}", message, tile_info);
+                commands.spawn(TileInfo { pos: tile_info.pos.clone(), geography: tile_info.geography.clone(), visible_to_players: Vec::new() });
+            }
         }
     }
 }

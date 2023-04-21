@@ -17,18 +17,16 @@ fn main() {
     match config.env {
         RunEnvironment::Client => {
             app
-                .add_plugin(ClientPlugin)
+                .add_plugin(ClientPlugin);
+            if config.debug {
+                app.add_plugin(WorldInspectorPlugin::default());
+            }
         },
         RunEnvironment::Server => {
             app
-                .add_plugin(ServerPlugin)
+                .add_plugin(ServerPlugin);
         },
     };
-
-    if config.debug {
-        app.add_plugin(WorldInspectorPlugin::default());
-    }
-
     app
         .insert_resource(config)
         .run();

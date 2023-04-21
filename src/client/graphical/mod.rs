@@ -1,4 +1,3 @@
-pub mod load_assets;
 mod inputs;
 
 use bevy::prelude::*;
@@ -6,23 +5,19 @@ use rand::Rng;
 
 use crate::common::logic::{*, units::UnitID};
 
-use self::{load_assets::{load_sprites, Spritesheet, Fonts, load_fonts}, inputs::{ZoomEvent, scroll_events, zoom_camera, PanEvent, mouse_pan_events, scroll_camera, mouse_click_events, GridPosClickEvent, select_unit}};
+use self::inputs::{ZoomEvent, scroll_events, zoom_camera, PanEvent, mouse_pan_events, scroll_camera, mouse_click_events, GridPosClickEvent, select_unit};
 
-use super::ClientState;
+use super::{ClientState, Spritesheet};
 
 pub struct GraphicalPlugin;
 
 impl Plugin for GraphicalPlugin {
     fn build(&self, app: &mut App) {
         app
-            .register_type::<CameraScalingInfo>()
-            .init_resource::<Spritesheet>()
-            .init_resource::<Fonts>()
+            .register_type::<GameCameraScalingInfo>()
             .add_event::<PanEvent>()
             .add_event::<ZoomEvent>()
             .add_event::<GridPosClickEvent>()
-            .add_startup_system(load_sprites)
-            .add_startup_system(load_fonts)
             .add_startup_system(spawn_camera)
             .add_system(setup_scaling.in_schedule(OnEnter(ClientState::Game)))
             .add_systems((render_terrain, render_features, render_units, render_icons).in_set(OnUpdate(ClientState::Game)))
@@ -37,7 +32,7 @@ impl Plugin for GraphicalPlugin {
 }
 
 #[derive(Component, Debug, Reflect)]
-pub struct CameraScalingInfo {
+pub struct GameCameraScalingInfo {
     x_scl: f32,
     y_scl: f32,
     unit_scl: f32,
@@ -100,7 +95,7 @@ fn render_terrain(
         bundle.transform.scale.y *= 0.7;
         bundle.transform.translation.z = 0f32;
 
-        commands.entity(e).insert(bundle).insert(Scalable).insert(RenderedTerrain);
+        commands.entity(e).insert(bundle).insert(GameScalable).insert(RenderedTerrain);
     });
 
     rendered_tiles.iter_mut().for_each(|(t, mut a, ())| {
@@ -115,6 +110,7 @@ fn geography_from_texture_index(index: usize) -> Geography {
         0..=3 => Geography::None,
         8..=11 => Geography::Water,
         4..=7 => Geography::Mountains,
+        12..=15 => Geography::Fog,
         _ => Geography::None
     }
 }
@@ -125,7 +121,7 @@ fn texture_index_from_geography(geo: &Geography) -> usize {
         Geography::None => rng.gen_range(0..3),
         Geography::Water => rng.gen_range(8..11),
         Geography::Mountains => rng.gen_range(4..7),
-        Geography::Fog => rng.gen_range(8..11)
+        Geography::Fog => rng.gen_range(12..15)
     };
 }
 
@@ -147,7 +143,7 @@ fn render_features(
         bundle.transform.scale.y *= 0.7;
         bundle.transform.translation.z = 10f32;
 
-        commands.entity(e).insert(bundle).insert(Scalable).insert(RenderedTerrain);
+        commands.entity(e).insert(bundle).insert(GameScalable).insert(RenderedTerrain);
     });
 
     rendered_features.iter_mut().for_each(|(tf, mut a, ())| {
@@ -170,8 +166,8 @@ fn texture_index_from_tile_feature(tf: &TileFeatures) -> usize {
     return match tf {
         TileFeatures::CurrencySite(Archetype(Archetypes::Magic)) => 0,
         TileFeatures::CurrencySite(Archetype(Archetypes::Science)) => 1,
-        TileFeatures::Nest(PlayerTeam(TeamColour::Red)) => 3,
-        _ => 4,
+        TileFeatures::Nest(PlayerTeam(TeamColour::Red)) => 2,
+        _ => 3,
     };
 }
 
@@ -193,7 +189,7 @@ fn render_units(
         bundle.transform.scale.y *= 0.7;
         bundle.transform.translation.z = 20f32;
 
-        commands.entity(e).insert(bundle).insert(Scalable).insert(RenderedTerrain);
+        commands.entity(e).insert(bundle).insert(GameScalable).insert(RenderedTerrain);
     });
 
     rendered_units.iter_mut().for_each(|(u, mut a, ())| {
@@ -236,7 +232,7 @@ fn render_icons(
         bundle.transform.scale.y *= 0.7;
         bundle.transform.translation.z = 30f32;
 
-        commands.entity(e).insert(bundle).insert(Scalable).insert(RenderedIcon);
+        commands.entity(e).insert(bundle).insert(GameScalable).insert(RenderedIcon);
     });
 
     rendered_icons.iter_mut().for_each(|(i, mut a, ())| {
@@ -263,7 +259,7 @@ fn texture_index_from_icon(i: &Icons) -> usize {
     };
 }
 
-fn update_transforms(mut cam: Query<(&OrthographicProjection, &mut CameraScalingInfo)>, board_info: Query<&Gameboard>) {
+fn update_transforms(mut cam: Query<(&OrthographicProjection, &mut GameCameraScalingInfo)>, board_info: Query<&Gameboard>) {
     if !cam.is_empty() && !board_info.is_empty() {
 
         let orth = cam.single().0;
@@ -286,8 +282,8 @@ fn update_transforms(mut cam: Query<(&OrthographicProjection, &mut CameraScaling
 
 
 fn conform_transforms_tiles(
-    cam: Query<(&OrthographicProjection, &CameraScalingInfo)>, 
-    mut tiles: Query<(Entity, &TileInfo, &mut Transform, With<Scalable>)>,
+    cam: Query<(&OrthographicProjection, &GameCameraScalingInfo)>, 
+    mut tiles: Query<(Entity, &TileInfo, &mut Transform, With<GameScalable>)>,
 ) {
 
     let scl = cam.single().1;
@@ -301,8 +297,8 @@ fn conform_transforms_tiles(
 }
 
 fn conform_transforms_features(
-    cam: Query<(&OrthographicProjection, &CameraScalingInfo)>, 
-    mut features: Query<(Entity, &TileFeature, &mut Transform, With<Scalable>)>,
+    cam: Query<(&OrthographicProjection, &GameCameraScalingInfo)>, 
+    mut features: Query<(Entity, &TileFeature, &mut Transform, With<GameScalable>)>,
 ) {
     let scl = cam.single().1;
 
@@ -315,8 +311,8 @@ fn conform_transforms_features(
 }
 
 fn conform_transforms_units(
-    cam: Query<(&OrthographicProjection, &CameraScalingInfo)>, 
-    mut units: Query<(Entity, &Unit, &mut Transform, With<Scalable>)>
+    cam: Query<(&OrthographicProjection, &GameCameraScalingInfo)>, 
+    mut units: Query<(Entity, &Unit, &mut Transform, With<GameScalable>)>
 ) {
 
     let scl = cam.single().1;
@@ -334,8 +330,8 @@ fn conform_transforms_units(
 }
 
 fn conform_transforms_icons(
-    cam: Query<(&OrthographicProjection, &CameraScalingInfo)>, 
-    mut units: Query<(Entity, &Icon, &mut Transform, With<Scalable>)>
+    cam: Query<(&OrthographicProjection, &GameCameraScalingInfo)>, 
+    mut units: Query<(Entity, &Icon, &mut Transform, With<GameScalable>)>
 ) {
 
     let scl = cam.single().1;
@@ -353,9 +349,12 @@ fn conform_transforms_icons(
 }
 
 #[derive(Component, Reflect)]
-struct Scalable;
+struct GameScalable;
 
-fn setup_scaling(mut commands: Commands, orth_q: Query<(Entity, &OrthographicProjection)>) {
+#[derive(Component, Reflect)]
+pub struct GameCamera;
+
+fn setup_scaling(mut commands: Commands, orth_q: Query<(Entity, &OrthographicProjection, With<GameCamera>)>) {
     let orth = orth_q.single().1;
     let x_scl = orth.area.max.x - orth.area.min.x;
     let y_scl = orth.area.max.y - orth.area.min.y;
@@ -364,7 +363,7 @@ fn setup_scaling(mut commands: Commands, orth_q: Query<(Entity, &OrthographicPro
     // TEMPORARILY spawn unit
     // TODO: Remove this
 
-    commands.entity(orth_q.single().0).insert(CameraScalingInfo {
+    commands.entity(orth_q.single().0).insert(GameCameraScalingInfo {
         x_scl: x_scl,
         y_scl: y_scl,
         unit_scl: unit_scl,
@@ -382,5 +381,5 @@ fn setup_scaling(mut commands: Commands, orth_q: Query<(Entity, &OrthographicPro
 
 fn spawn_camera(mut commands: Commands) {
     let cam = Camera2dBundle::default();
-    commands.spawn(cam);
+    commands.spawn(cam).insert(GameCamera);
 }

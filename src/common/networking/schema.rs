@@ -20,6 +20,10 @@ pub struct Player {
 // Sent by server
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessages {
+    TestPacket {
+        message: String,
+        tile_info: PlayerTileInfo
+    },
     CompleteGameStatePacket {
         tiles: Vec<PlayerTileInfo>,
         units: Vec<Unit>,

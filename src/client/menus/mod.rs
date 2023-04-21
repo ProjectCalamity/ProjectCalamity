@@ -1,61 +1,72 @@
 use bevy::prelude::*;
+use kayak_ui::prelude::{*, widgets::*};
 
-use self::main_menu::{spawn_main_menu, despawn_main_menu, scale_main_menu_background, button_interaction};
-
-
-use super::{ClientState, graphical::load_assets::Fonts};
+use super::{ClientState};
 
 pub struct MenusPlugin;
 
 impl Plugin for MenusPlugin {
     fn build(&self, app: &mut App) {
         app
-            .add_system(spawn_main_menu.in_schedule(OnEnter(ClientState::MainMenu)))
-            .add_system(despawn_main_menu.in_schedule(OnExit(ClientState::MainMenu)))
-            .add_system(scale_main_menu_background.in_set(OnUpdate(ClientState::MainMenu)))
-            .add_system(button_interaction.in_set(OnUpdate(ClientState::MainMenu)));
+            .add_plugin(KayakContextPlugin)
+            .add_plugin(KayakWidgets)
+            .add_system(skip_menu.in_schedule(OnEnter(ClientState::MainMenu)))
+            .add_system(setup_scaling.in_set(OnUpdate(ClientState::MainMenu)))
+            .add_system(update_scaling.in_set(OnUpdate(ClientState::MainMenu)));
     }
 }
 
-pub struct ProjectCalamityStyle;
-
-pub struct SpawnableButton {
-    button: ButtonBundle,
-    text: TextBundle,
+fn skip_menu(mut state: ResMut<NextState<ClientState>>) {
+    info!("Skipping menu, directly entering game");
+    state.0 = Some(ClientState::Game);
 }
 
-impl ProjectCalamityStyle {
-    pub const BACKGROUND_COLOUR: Color = Color::Rgba { red: 0.3f32, green: 0.3f32, blue: 0.3f32 as f32, alpha: 0.9f32 };
-    pub const BUTTON_COLOUR: Color = Color::Rgba { red: 0f32, green: 0f32, blue: 0f32, alpha: 0.5f32 };
-    pub const BUTTON_HOVER_COLOUR: Color = Color::Rgba { red: 0.2f32, green: 0.2f32, blue: 0.2f32, alpha: 0.3f32 };
+#[derive(Component, Reflect)]
+pub struct UICamera;
 
-    pub const BUTTON_STYLE: Style = Style { 
-        justify_content: JustifyContent::Center,
-        align_items: AlignItems::Center,
-        size: Size::new(Val::Percent(30f32), Val::Percent(10f32)), ..Style::DEFAULT 
-    };
+#[derive(Component, Reflect)]
+pub struct UICameraScalingInfo {
+    width_perc: f32, // From 0-1
+    height_perc: f32, // From 0-1
+}
 
-    fn generate_generic_button(fonts: &Res<Fonts>, text: &str) -> SpawnableButton {
+pub struct UIScalable;
 
-        return SpawnableButton {
-            button: ButtonBundle {
-                style: ProjectCalamityStyle::BUTTON_STYLE,
-                background_color: ProjectCalamityStyle::BUTTON_COLOUR.into(),
-                ..default()
-            },
-            text: TextBundle {
-                text: Text { 
-                    sections: vec![
-                        TextSection::new(text, 
-                        TextStyle { font: fonts.bold.clone(), font_size: 42f32, color: Color::WHITE })
-                    ], 
-                    alignment: TextAlignment::Center,
-                    ..default()
-                },
-                ..default()
-            }
-        };
+fn setup_scaling(mut commands: Commands, orth_q: Query<(Entity, &OrthographicProjection, With<UICamera>, Without<UICameraScalingInfo>)>) {
+    if orth_q.iter().len() <= 0 {
+        return;
     }
+
+    let orth = orth_q.single().1;
+    let mut width_perc = 1f32;
+    let mut height_perc = 1f32;
+    
+    if orth.area.width() > orth.area.height() {
+        height_perc *= orth.area.width() / orth.area.height();
+    } else if orth.area.width() < orth.area.height() {
+        width_perc *= orth.area.height() / orth.area.width();
+    }
+    
+    commands
+        .entity(orth_q.single().0)
+        .insert(UICameraScalingInfo { width_perc, height_perc });
 }
 
-mod main_menu;
+fn update_scaling(mut orth_q: Query<(Entity, &OrthographicProjection, &mut UICameraScalingInfo, With<UICamera>)>) {
+    if orth_q.iter().len() <= 0 {
+        return;
+    }
+    let orth = orth_q.single().1;
+    let mut width_perc = 1f32;
+    let mut height_perc = 1f32;
+    
+    if orth.area.width() > orth.area.height() {
+        height_perc *= orth.area.width() / orth.area.height();
+    } else if orth.area.width() < orth.area.height() {
+        width_perc *= orth.area.height() / orth.area.width();
+    }
+
+    let mut csi = orth_q.single_mut().2;
+    csi.width_perc = width_perc;
+    csi.height_perc = height_perc;
+}

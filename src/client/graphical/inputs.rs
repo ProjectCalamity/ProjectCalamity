@@ -2,7 +2,7 @@ use bevy::{prelude::*, input::mouse::{MouseWheel, MouseMotion}};
 
 use crate::common::logic::{Unit, TileInfo, Gameboard, TraversableTiles};
 
-use super::{CameraScalingInfo, Icon, Icons, Scalable, RenderedIcon};
+use super::{GameCameraScalingInfo, Icon, Icons, GameScalable, RenderedIcon};
 
 #[derive(Debug, Component, Copy, Clone)]
 pub struct GridBounds {
@@ -68,34 +68,34 @@ pub fn mouse_pan_events(
 pub fn mouse_click_events(
     buttons: Res<Input<MouseButton>>,
     windows: Query<&Window>,
-    camera_q: Query<(&Camera, &GlobalTransform, &CameraScalingInfo)>,
+    camera_q: Query<(&Camera, &GlobalTransform, &GameCameraScalingInfo)>,
     mut grid_pos_click_evw: EventWriter<GridPosClickEvent>,
     gameboard_q: Query<&Gameboard>,
     tiles: Query<(&TileInfo, &Transform)>,
 ) {
 
-    if buttons.just_released(MouseButton::Left) {
-        let (camera, camera_transform, scl) = camera_q.single();
+    // if buttons.just_released(MouseButton::Left) {
+    //     let (camera, camera_transform, scl) = camera_q.single();
 
-        let window = windows.single(); 
-        let gameboard = gameboard_q.single();
-        let side_len = scl.unit_scl / (u32::max(gameboard.max_x, gameboard.max_y)) as f32;
+    //     let window = windows.single(); 
+    //     let gameboard = gameboard_q.single();
+    //     let side_len = scl.unit_scl / (u32::max(gameboard.max_x, gameboard.max_y)) as f32;
 
-        if let Some(wp) = window.cursor_position()
-            .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
-            .map(|ray| ray.origin.truncate())
-        {
+    //     if let Some(wp) = window.cursor_position()
+    //         .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+    //         .map(|ray| ray.origin.truncate())
+    //     {
 
-            tiles.iter().for_each(|(ti, tr)| {
-                if wp.x >= tr.translation.x - (side_len / 2f32)
-                    && wp.y >= tr.translation.y - (side_len / 2f32)
-                    && wp.x <= tr.translation.x + (side_len / 2f32)
-                    && wp.y <= tr.translation.y + (side_len / 2f32) {
-                        grid_pos_click_evw.send(GridPosClickEvent { x_grid: ti.pos[0] as i32, y_grid: ti.pos[1] as i32});
-                    }
-            });
-        }
-    }
+    //         tiles.iter().for_each(|(ti, tr)| {
+    //             if wp.x >= tr.translation.x - (side_len / 2f32)
+    //                 && wp.y >= tr.translation.y - (side_len / 2f32)
+    //                 && wp.x <= tr.translation.x + (side_len / 2f32)
+    //                 && wp.y <= tr.translation.y + (side_len / 2f32) {
+    //                     grid_pos_click_evw.send(GridPosClickEvent { x_grid: ti.pos[0] as i32, y_grid: ti.pos[1] as i32});
+    //                 }
+    //         });
+    //     }
+    // }
 }
 
 pub fn select_unit(
@@ -130,9 +130,9 @@ pub fn select_unit(
         } else {
             units.iter().for_each(|(u, tt)| {
                 if (u.pos[0] == e.x_grid) && (u.pos[1] == e.y_grid) {
-                    commands.spawn(Icon { icon: Icons::Selector, pos: u.pos.clone() }).insert(Scalable).insert(Name::new("Icon"));
+                    commands.spawn(Icon { icon: Icons::Selector, pos: u.pos.clone() }).insert(GameScalable).insert(Name::new("Icon"));
                     tt.0.iter().for_each(|t| {
-                        commands.spawn(Icon { icon: Icons::Circle, pos: t.clone() }).insert(Scalable).insert(Name::new("Icon"));
+                        commands.spawn(Icon { icon: Icons::Circle, pos: t.clone() }).insert(GameScalable).insert(Name::new("Icon"));
                     });
                     commands.spawn(SelectedUnit(u.pos.clone()));
                 }

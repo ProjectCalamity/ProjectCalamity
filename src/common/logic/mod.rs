@@ -192,17 +192,26 @@ pub struct TileInfo {
 }
 
 impl TileInfo {
-    pub fn player_tile_info(&self, player: PlayerTeam, feature: TileFeature) -> PlayerTileInfo {
+    pub fn player_tile_info(&self, player: PlayerTeam, feature: Option<&&TileFeature>) -> PlayerTileInfo {
         let mut geography = Geography::Fog;
         if self.visible_to_players.contains(&player) {
             geography = self.geography;
         }
+
         let mut visible_features = None;
-        if feature.feature != TileFeatures::CurrencySite(Archetype(Archetypes::Science)) && feature.feature != TileFeatures::CurrencySite(Archetype(Archetypes::Magic)) {
-            visible_features = Some(feature);
-        } else if feature.visible_to_players.contains(&player) {
-            visible_features = Some(feature);
+
+        if let Some(feature_ref) = feature {
+            if self.visible_to_players.contains(&player) {
+                let feature = feature_ref.clone().clone();
+                if feature.feature != TileFeatures::CurrencySite(Archetype(Archetypes::Science)) 
+                    && feature.feature != TileFeatures::CurrencySite(Archetype(Archetypes::Magic)) {
+                    visible_features = Some(feature);
+                } else if feature.visible_to_players.contains(&player) {
+                    visible_features = Some(feature);
+                }
+            }
         }
+
         return PlayerTileInfo { geography: geography, pos: self.pos, visible_features: visible_features };
     }
 }

@@ -13,7 +13,6 @@ impl Plugin for ServerPlugin {
         app
             .insert_resource(ServerGameManager::default())
             .add_state::<ServerState>()
-            .add_event::<GameboardGeneratedEvent>()
             .add_plugin(GameLogicPlugin)
             .add_plugin(LogPlugin::default())
             .add_plugin(ServerNetworkPlugin)
@@ -41,8 +40,6 @@ pub enum ServerState {
 pub struct ServerGameManager {
     players: Vec<(Player, PlayerTeam)>
 }
-
-pub struct GameboardGeneratedEvent;
 
 pub fn manage_lobby(
     mut commands: Commands,
