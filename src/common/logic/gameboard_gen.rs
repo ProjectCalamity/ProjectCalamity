@@ -111,6 +111,35 @@ pub fn generate_gameboard(
                     visible_to_players: vec![team.clone()]
                 }
             ).insert(Name::new(format!("Nest at [{:?}, {:?}]", pos[0], pos[1])));
+            
+            // Two accompanying units
+
+            for pos_mod in [-1, 1] {
+                commands.spawn(UnitBundle {
+                    unit: Unit { 
+                        id: UnitID::ScienceGenericTest, 
+                        pos: [pos[0], pos[1] + pos_mod], 
+                        health: Health(3f32), 
+                        attack: Attack { 
+                            base: 1f32, 
+                            range: 1, 
+                            splash: false, 
+                            splash_multiplier: 1f32, 
+                            magic_multiplier: 1f32, 
+                            science_multiplier: 1f32 
+                        }, 
+                        defense: Defense { 
+                            base: 1f32, 
+                            magic_multiplier: 1f32, 
+                            science_multiplier: 1f32 
+                        }, 
+                        movement: Movement(1),
+                        turn_execute_stage: TurnExecuteStage(TurnExecuteStages::MidTurn), 
+                        archetype: Archetype(Archetypes::None), 
+                        owner: team.clone() 
+                    },
+            }).insert(Name::new(format!("Unit at [{:?}]", [pos[0], pos[1] + pos_mod])));
+            }
         }
     }
 }

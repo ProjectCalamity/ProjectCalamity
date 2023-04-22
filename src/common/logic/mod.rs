@@ -177,7 +177,7 @@ fn calculate_traversable_tiles(
 #[derive(Component, FromReflect, Reflect)]
 pub struct TraversableTiles(pub Vec<[i32; 2]>);
 
-#[derive(Component, Reflect)]
+#[derive(Clone, Component, Debug, Deserialize, Reflect, Serialize)]
 pub struct Gameboard {
     pub name: String,
     pub max_x: u32,
@@ -231,10 +231,10 @@ struct UnitActionBundle{
 
 #[derive(Clone, Component, Debug, Deserialize, Reflect, Serialize)]
 pub struct UnitAction {
-    action_type: UnitActions,
-    turn_stage: TurnExecuteStage,
-    curr_pos: [i32; 2],
-    action_pos: [i32; 2]
+    pub action_type: UnitActions,
+    pub turn_stage: TurnExecuteStage,
+    pub curr_pos: [i32; 2],
+    pub action_pos: [i32; 2]
 }
 
 #[derive(Clone, Debug, Deserialize, Reflect, PartialEq, Serialize)]
@@ -260,6 +260,7 @@ pub struct Unit {
     pub movement: Movement,
     pub turn_execute_stage: TurnExecuteStage,
     pub archetype: Archetype,
+    pub owner: PlayerTeam,
 }
 
 #[derive(Clone, Component, Debug, Default, Deserialize, FromReflect, Reflect, Serialize)]
@@ -327,11 +328,12 @@ pub enum TileFeatures {
     Nest(PlayerTeam)
 }
 
-#[derive(Clone, Component, Debug, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
+#[derive(Clone, Component, Debug, Default, Deserialize, Eq, FromReflect, Hash, PartialEq, Reflect, Serialize)]
 pub struct PlayerTeam(pub TeamColour);
 
-#[derive(Clone, Debug, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, FromReflect, Hash, PartialEq, Reflect, Serialize)]
 pub enum TeamColour {
+    #[default]
     Blue,
     Red,
     Purple,

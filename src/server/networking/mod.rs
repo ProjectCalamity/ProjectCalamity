@@ -1,8 +1,7 @@
 use bevy::{prelude::*, utils::{HashMap, Uuid}};
-use bevy_inspector_egui::bevy_egui::EguiContextQueryItem;
-use bevy_quinnet::server::{QuinnetServerPlugin, Server, ServerConfiguration, certificate::CertificateRetrievalMode};
+use bevy_quinnet::{server::{QuinnetServerPlugin, Server, ServerConfiguration, certificate::CertificateRetrievalMode}};
 
-use crate::common::{networking::schema::{ClientMessages, ServerMessages, SentPlayerInfoRequestPacket, PlayerTileInfo, Player}, config::Config, logic::{PlayerTeam, TeamColour, TileInfo, TileFeature, Geography}};
+use crate::common::{networking::schema::{ClientMessages, ServerMessages, SentPlayerInfoRequestPacket, PlayerTileInfo, Player}, config::Config, logic::{PlayerTeam, TeamColour, TileInfo, TileFeature, Gameboard, Unit, Geography, UnitAction}};
 
 use super::{ServerState, ServerGameManager};
 
@@ -14,9 +13,15 @@ impl Plugin for ServerNetworkPlugin {
             .add_plugin(QuinnetServerPlugin::default())
             .init_resource::<ClientIDMap>()
             .init_resource::<NetworkState>()
+            .init_resource::<PlayerMoves>()
             .add_startup_system(start_listener)
             .add_system(handle_client_messages);
     }
+}
+
+#[derive(Default, Resource)]
+pub struct PlayerMoves {
+    map: HashMap<PlayerTeam, Vec<UnitAction>>
 }
 
 #[derive(Default, Resource)]
@@ -45,10 +50,11 @@ fn handle_client_messages(
     mut clients: ResMut<ClientIDMap>, 
     sent_q: Query<&SentPlayerInfoRequestPacket>,
     server_state: Res<State<ServerState>>,
-    mut game_manager: ResMut<ServerGameManager>
+    mut game_manager: ResMut<ServerGameManager>,
+    mut player_moves: ResMut<PlayerMoves>
 ) {
+    let endpoint = server.endpoint_mut();
     if server_state.0 == ServerState::Lobby {
-        let endpoint = server.endpoint_mut();
         for client_id in endpoint.clients() {
             if let None = clients.map.get(&client_id) {
                 if sent_q.iter().filter(|c| c.0 == client_id).collect::<Vec<&SentPlayerInfoRequestPacket>>().len() == 0 {
@@ -57,23 +63,45 @@ fn handle_client_messages(
                     commands.spawn(SentPlayerInfoRequestPacket(client_id));
                 }
             }
-            while let Some(message) = endpoint.try_receive_message_from::<ClientMessages>(client_id) {
-                match message {
-                    ClientMessages::ChatMessagePacket { player, contents } => info!("{:?} » {:?}", player.username, contents),
-                    ClientMessages::MoveActionPacket { player, unit_action } => info!("{:?} Requests Movement: {:?}", player.username, unit_action),
-                    ClientMessages::ConnectionPacket { player } => {
-                        if clients.map.iter().filter(|(_id, uuid)| uuid == &&player.id).collect::<Vec<_>>().len() == 0 {
-                            info!("{:?}[{:?}] connected", player.username, player.id);
-                            game_manager.players.push((player.clone(), PlayerTeam(TeamColour::from_int(&clients.map.len()))));
-                            clients.map.insert(client_id, player.id);
-                        } else {
-                            endpoint.send_message(client_id, ServerMessages::DisconnectionPacket { message: "Attempted to join, but was already connected".to_string() }).unwrap();
-                            info!("{:?}[{:?}] attempted connect, but was already connected", player.username, player.id);
-                            println!("{:?}", clients.map);
-                        }
-                    },
-                    ClientMessages::DisconnectionPacket { player } => info!("{:?} disconnected", player.username),
-                }
+        }
+    }
+    for client_id in endpoint.clients() {
+        let client_messages = endpoint.try_receive_message_from::<ClientMessages>(client_id);
+        if let Some(message) = client_messages {
+            match message {
+                ClientMessages::ChatMessagePacket { player, contents } => info!("{:?} » {:?}", player.username, contents),
+                ClientMessages::MoveActionPacket { unit_action } => {
+                    let team = &game_manager
+                        .players
+                        .iter()
+                        .filter(|(p, _pt)| 
+                            p.id == *clients
+                                .map
+                                .get(&client_id)
+                                .unwrap()
+                        ).collect::<Vec<&(Player, PlayerTeam)>>()
+                        [0].1;
+                    if player_moves
+                        .map
+                        .keys()
+                        .filter(|pt| pt == &team)
+                        .collect::<Vec<_>>().len() == 0 {
+                        info!("Adding moves: {:?} for team {:?}", unit_action, team);
+                        player_moves.map.insert(team.clone(), unit_action);
+                    }
+                },
+                ClientMessages::ConnectionPacket { player } => {
+                    if clients.map.iter().filter(|(_id, uuid)| uuid == &&player.id).collect::<Vec<_>>().len() == 0 {
+                        info!("{:?}[{:?}] connected", player.username, player.id);
+                        game_manager.players.push((player.clone(), PlayerTeam(TeamColour::from_int(&clients.map.len()))));
+                        clients.map.insert(client_id, player.id);
+                    } else {
+                        endpoint.send_message(client_id, ServerMessages::DisconnectionPacket { message: "Attempted to join, but was already connected".to_string() }).unwrap();
+                        info!("{:?}[{:?}] attempted connect, but was already connected", player.username, player.id);
+                        println!("{:?}", clients.map);
+                    }
+                },
+                ClientMessages::DisconnectionPacket { player } => info!("{:?} disconnected", player.username),
             }
         }
     }
@@ -85,7 +113,9 @@ pub fn send_gameboard(
     tiles: Query<&TileInfo>,
     tile_features: Query<&TileFeature>,
     players: Query<(&Player, &PlayerTeam)>,
-    mut network_state: ResMut<NetworkState>
+    units: Query<&Unit>,
+    mut network_state: ResMut<NetworkState>,
+    gameboard_q: Query<&Gameboard>
 ) {
     if !network_state.sent_init_gameboard && tiles.iter().len() > 0 {
         
@@ -115,14 +145,21 @@ pub fn send_gameboard(
                     )
                 ).collect::<Vec<PlayerTileInfo>>();
 
+            let pos_vec = tiles_vec
+                .iter()
+                .filter(|t| t.geography != Geography::Fog)
+                .map(|u| u.pos)
+                .collect::<Vec<[i32; 2]>>();
+
             server
                 .endpoint_mut()
                 .send_message(
                     eqiv_uuid.0.clone(), 
                     ServerMessages::CompleteGameStatePacket { 
                         tiles: tiles_vec, 
-                        units: Vec::new(), 
-                        players: Vec::new() 
+                        units: units.iter().filter(|u| pos_vec.contains(&u.pos)).map(|u| u.clone()).collect::<Vec<Unit>>(), 
+                        players: Vec::new(),
+                        gameboard: gameboard_q.single().clone()
                     }
                 ).unwrap();
         })

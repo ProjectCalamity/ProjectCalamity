@@ -1,11 +1,11 @@
-mod inputs;
+pub mod inputs;
 
 use bevy::prelude::*;
 use rand::Rng;
 
 use crate::common::logic::{*, units::UnitID};
 
-use self::inputs::{ZoomEvent, scroll_events, zoom_camera, PanEvent, mouse_pan_events, scroll_camera, mouse_click_events, GridPosClickEvent, select_unit};
+use self::inputs::{ZoomEvent, scroll_events, zoom_camera, PanEvent, mouse_pan_events, scroll_camera, mouse_click_events, GridPosClickEvent, select_unit, TurnCompletedEvent, keyboard_input};
 
 use super::{ClientState, Spritesheet};
 
@@ -15,9 +15,10 @@ impl Plugin for GraphicalPlugin {
     fn build(&self, app: &mut App) {
         app
             .register_type::<GameCameraScalingInfo>()
-            .add_event::<PanEvent>()
-            .add_event::<ZoomEvent>()
             .add_event::<GridPosClickEvent>()
+            .add_event::<PanEvent>()
+            .add_event::<TurnCompletedEvent>()
+            .add_event::<ZoomEvent>()
             .add_startup_system(spawn_camera)
             .add_system(setup_scaling.in_schedule(OnEnter(ClientState::Game)))
             .add_systems((render_terrain, render_features, render_units, render_icons).in_set(OnUpdate(ClientState::Game)))
@@ -27,7 +28,8 @@ impl Plugin for GraphicalPlugin {
             .add_system(zoom_camera.in_set(OnUpdate(ClientState::Game)))
             .add_system(mouse_click_events.in_set(OnUpdate(ClientState::Game)))
             .add_system(mouse_pan_events.in_set(OnUpdate(ClientState::Game)))
-            .add_system(scroll_camera.in_set(OnUpdate(ClientState::Game)));
+            .add_system(scroll_camera.in_set(OnUpdate(ClientState::Game)))
+            .add_system(keyboard_input.in_set(OnUpdate(ClientState::Game)));
     }
 }
 
@@ -368,14 +370,6 @@ fn setup_scaling(mut commands: Commands, orth_q: Query<(Entity, &OrthographicPro
         y_scl: y_scl,
         unit_scl: unit_scl,
         unit_delta: 1f32,
-    });
-
-    commands.spawn(UnitBundle {
-        unit: Unit { id: UnitID::ScienceGenericTest, pos: [2, 2], health: Health(3f32), attack: Attack { base: 2f32, range: 1, splash: false, splash_multiplier: 1f32, magic_multiplier: 1f32, science_multiplier: 1f32 }, defense: Defense { base: 3f32, magic_multiplier: 1f32, science_multiplier: 1f32 }, movement: Movement(3), turn_execute_stage: TurnExecuteStage(TurnExecuteStages::MidTurn), archetype: Archetype(Archetypes::Science) },
-    });
-
-    commands.spawn(UnitBundle {
-        unit: Unit { id: UnitID::MagicGenericTest, pos: [4, 2], health: Health(3f32), attack: Attack { base: 2f32, range: 1, splash: false, splash_multiplier: 1f32, magic_multiplier: 1f32, science_multiplier: 1f32 }, defense: Defense { base: 3f32, magic_multiplier: 1f32, science_multiplier: 1f32 }, movement: Movement(1), turn_execute_stage: TurnExecuteStage(TurnExecuteStages::MidTurn), archetype: Archetype(Archetypes::Science) },
     });
 }
 

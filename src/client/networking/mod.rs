@@ -1,7 +1,9 @@
 use bevy::prelude::*;
-use bevy_quinnet::{client::{Client, connection::ConnectionConfiguration, certificate::CertificateVerificationMode, QuinnetClientPlugin}, server::QuinnetServerPlugin};
+use bevy_quinnet::{client::{Client, connection::ConnectionConfiguration, certificate::CertificateVerificationMode, QuinnetClientPlugin}};
 
-use crate::{common::{config::Config, networking::schema::{ServerMessages, ClientMessages, Player}, logic::{TileInfo, TileFeature}}};
+use crate::{common::{config::Config, networking::schema::{ServerMessages, ClientMessages, Player}, logic::{TileInfo, UnitAction}}};
+
+use super::graphical::inputs::TurnCompletedEvent;
 
 pub struct ClientNetworkPlugin;
 
@@ -10,7 +12,8 @@ impl Plugin for ClientNetworkPlugin {
         app
             .add_plugin(QuinnetClientPlugin::default())
             .add_startup_system(open_connection)
-            .add_system(handle_server_messages);
+            .add_system(handle_server_messages)
+            .add_system(send_unit_actions);
     }
 }
 
@@ -26,20 +29,39 @@ fn open_connection(mut client: ResMut<Client>, config: Res<Config>) {
     println!("Connection started to {:?}", connection_string);
 }
 
+fn send_unit_actions(mut commands: Commands, actions: Query<(Entity, &UnitAction)>, client: ResMut<Client>, mut turn_evr: EventReader<TurnCompletedEvent>, player: Query<&Player>) {
+    turn_evr.iter().for_each(|_| {
+        let action_vec = actions.iter().map(|(_, a)| a.clone()).collect::<Vec<UnitAction>>();
+        client.connection().send_message(ClientMessages::MoveActionPacket { unit_action: action_vec.clone() }).unwrap();
+        actions.iter().for_each(|(e, _a)| commands.entity(e).despawn_recursive());
+    });
+}
+
 fn handle_server_messages(mut commands: Commands, mut client: ResMut<Client>, player: Query<&Player>) {
     while let Some(msg) = client.connection_mut().try_receive_message::<ServerMessages>() {
         match msg {
-            ServerMessages::CompleteGameStatePacket { tiles, units, players } => {
+            ServerMessages::CompleteGameStatePacket { tiles, units, players, gameboard } => {
                 tiles.iter().for_each(|tile| { 
-                    // Tile
+                    // Tiles
                     commands.spawn(TileInfo { pos: tile.pos, geography: tile.geography, visible_to_players: Vec::new() })
                         .insert(Name::new(format!("Tile at ({:?})", tile.pos))); // For rendering purposes, we can ignore visible_to_players
+                    
                     // Features
                     if let Some(feature) = tile.visible_features.clone() {
                         commands.spawn(feature)
                             .insert(Name::new(format!("Tile Feature at ({:?})", tile.pos))); // For rendering purposes, we can ignore visible_to_players
                     }
                 });
+                // Units
+                units
+                    .iter()
+                    .for_each(|u| { 
+                        commands
+                            .spawn(u.clone())
+                            .insert(Name::new(format!("Unit at [{:?}]", u.pos)));
+                    });
+                // Gameboard
+                commands.spawn(gameboard.clone()).insert(Name::new("Gameboard"));
 
                 // TODO: Spawn units and players
             }
@@ -47,7 +69,7 @@ fn handle_server_messages(mut commands: Commands, mut client: ResMut<Client>, pl
                 info!("Recieved tile info from server {:?}", tile);
                 // Tile
                 commands.spawn(TileInfo { pos: tile.pos, geography: tile.geography, visible_to_players: Vec::new() })
-                        .insert(Name::new(format!("Tile at ({:?})", tile.pos))); // For rendering purposes, we can ignore visible_to_players
+                    .insert(Name::new(format!("Tile at ({:?})", tile.pos))); // For rendering purposes, we can ignore visible_to_players
                 // Features
                 if let Some(feature) = tile.visible_features.clone() {
                     commands.spawn(feature)

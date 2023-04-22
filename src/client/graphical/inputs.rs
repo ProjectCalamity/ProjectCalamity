@@ -1,14 +1,10 @@
 use bevy::{prelude::*, input::mouse::{MouseWheel, MouseMotion}};
 
-use crate::common::logic::{Unit, TileInfo, Gameboard, TraversableTiles};
+use crate::common::logic::{Unit, TileInfo, Gameboard, TraversableTiles, UnitAction, UnitActions, TurnExecuteStage, TurnExecuteStages};
 
 use super::{GameCameraScalingInfo, Icon, Icons, GameScalable, RenderedIcon};
 
-#[derive(Debug, Component, Copy, Clone)]
-pub struct GridBounds {
-    pub position: Vec2,
-    pub size: Vec2,
-}
+pub struct TurnCompletedEvent;
 
 #[derive(Debug, Component, FromReflect, Reflect)]
 pub struct SelectedUnit(pub [i32; 2]);
@@ -53,6 +49,13 @@ pub fn scroll_events(
     }
 }
 
+pub fn keyboard_input(keys: Res<Input<KeyCode>>, mut turn_evw: EventWriter<TurnCompletedEvent>) {
+    if keys.just_pressed(KeyCode::Return) {
+        turn_evw.send(TurnCompletedEvent);
+        info!("Ending turn")
+    }
+} 
+
 pub fn mouse_pan_events(
     buttons: Res<Input<MouseButton>>,
     mut motion_evr: EventReader<MouseMotion>,
@@ -74,28 +77,28 @@ pub fn mouse_click_events(
     tiles: Query<(&TileInfo, &Transform)>,
 ) {
 
-    // if buttons.just_released(MouseButton::Left) {
-    //     let (camera, camera_transform, scl) = camera_q.single();
+    if buttons.just_released(MouseButton::Left) && tiles.iter().len() > 0 {
+        let (camera, camera_transform, scl) = camera_q.single();
 
-    //     let window = windows.single(); 
-    //     let gameboard = gameboard_q.single();
-    //     let side_len = scl.unit_scl / (u32::max(gameboard.max_x, gameboard.max_y)) as f32;
+        let window = windows.single(); 
+        let gameboard = gameboard_q.single();
+        let side_len = scl.unit_scl / (u32::max(gameboard.max_x, gameboard.max_y)) as f32;
 
-    //     if let Some(wp) = window.cursor_position()
-    //         .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
-    //         .map(|ray| ray.origin.truncate())
-    //     {
+        if let Some(wp) = window.cursor_position()
+            .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+            .map(|ray| ray.origin.truncate())
+        {
 
-    //         tiles.iter().for_each(|(ti, tr)| {
-    //             if wp.x >= tr.translation.x - (side_len / 2f32)
-    //                 && wp.y >= tr.translation.y - (side_len / 2f32)
-    //                 && wp.x <= tr.translation.x + (side_len / 2f32)
-    //                 && wp.y <= tr.translation.y + (side_len / 2f32) {
-    //                     grid_pos_click_evw.send(GridPosClickEvent { x_grid: ti.pos[0] as i32, y_grid: ti.pos[1] as i32});
-    //                 }
-    //         });
-    //     }
-    // }
+            tiles.iter().for_each(|(ti, tr)| {
+                if wp.x >= tr.translation.x - (side_len / 2f32)
+                    && wp.y >= tr.translation.y - (side_len / 2f32)
+                    && wp.x <= tr.translation.x + (side_len / 2f32)
+                    && wp.y <= tr.translation.y + (side_len / 2f32) {
+                        grid_pos_click_evw.send(GridPosClickEvent { x_grid: ti.pos[0] as i32, y_grid: ti.pos[1] as i32});
+                    }
+            });
+        }
+    }
 }
 
 pub fn select_unit(
@@ -103,33 +106,60 @@ pub fn select_unit(
     mut click_evr: EventReader<GridPosClickEvent>,
     mut units: Query<(&mut Unit, &TraversableTiles)>,
     selected: Query<(Entity, &SelectedUnit)>,
-    icons: Query<(Entity, &RenderedIcon)>
+    icons: Query<(Entity, &RenderedIcon)>,
+    actions: Query<(Entity, &UnitAction)>
 ) {
     // First despawn all other icons 
     if click_evr.len() >= 1 {
         selected.for_each(|(e, _su)| commands.entity(e).despawn_recursive());
     }
 
-    click_evr.iter().for_each(|e| {
+    click_evr.iter().for_each(|gpce| {
 
         // Try to move
         if selected.iter().len() >= 1 {
             let mut filtered_units = Vec::<(Mut<Unit>, &TraversableTiles)>::new();
+            
             let selected_u = selected.single();
+
             units
                 .iter_mut()
                 .filter(|(u, _tt)| u.pos == selected_u.1.0)
                 .for_each(|f| filtered_units.push(f));
+            
             filtered_units
                 .iter_mut()
-                .filter(|(_u, tt)| tt.0.contains(&[e.x_grid, e.y_grid]))
+                .filter(|(_u, tt)| tt.0.contains(&[gpce.x_grid, gpce.y_grid]))
                 .collect::<Vec<_>>()
                 .iter_mut()
-                .for_each(|(u, _tt)| u.pos = [e.x_grid, e.y_grid]);
+                .for_each(|(u, _tt)| { 
+                    // Ensure that we haven't already set another movement for this unit
+                    let existing_actions = actions
+                        .iter()
+                        .filter(|(_e, a)| a.curr_pos == u.pos)
+                        .collect::<Vec<_>>();
+
+                    for (e, _a) in existing_actions {
+                        commands.entity(e).despawn_recursive();
+                    }
+                    
+                    // Spawn unit action
+                    commands.spawn(
+                    UnitAction { 
+                        action_type: UnitActions::Move, 
+                        turn_stage: TurnExecuteStage(TurnExecuteStages::MidTurn), 
+                        curr_pos: u.pos.clone(), 
+                        action_pos: [gpce.x_grid, gpce.y_grid].clone(),
+                    }).insert(Name::new("Unit Action"));
+
+
+                });
+            
             icons.for_each(|(e, _)| commands.entity(e).despawn_recursive());
+            
         } else {
             units.iter().for_each(|(u, tt)| {
-                if (u.pos[0] == e.x_grid) && (u.pos[1] == e.y_grid) {
+                if (u.pos[0] == gpce.x_grid) && (u.pos[1] == gpce.y_grid) {
                     commands.spawn(Icon { icon: Icons::Selector, pos: u.pos.clone() }).insert(GameScalable).insert(Name::new("Icon"));
                     tt.0.iter().for_each(|t| {
                         commands.spawn(Icon { icon: Icons::Circle, pos: t.clone() }).insert(GameScalable).insert(Name::new("Icon"));

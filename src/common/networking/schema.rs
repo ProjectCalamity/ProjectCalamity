@@ -1,7 +1,7 @@
 use bevy::{utils::Uuid, prelude:: Component};
 use serde::{Serialize, Deserialize};
 
-use crate::common::logic::{Geography, TileFeature, Unit, UnitAction};
+use crate::common::logic::{Geography, TileFeature, Unit, UnitAction, Gameboard};
 
 // Building blocks
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,6 +28,7 @@ pub enum ServerMessages {
         tiles: Vec<PlayerTileInfo>,
         units: Vec<Unit>,
         players: Vec<Player>,
+        gameboard: Gameboard
     },
     PlayerTileInfoPacket {
         tile: PlayerTileInfo
@@ -64,8 +65,7 @@ pub enum ClientMessages {
         contents: String,
     },
     MoveActionPacket {
-        player: Player,
-        unit_action: UnitAction
+        unit_action: Vec<UnitAction>
     },
     ConnectionPacket {
         player: Player
