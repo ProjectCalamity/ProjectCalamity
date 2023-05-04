@@ -21,8 +21,27 @@ impl Plugin for GraphicalPlugin {
             .add_event::<ZoomEvent>()
             .add_startup_system(spawn_camera)
             .add_system(setup_scaling.in_schedule(OnEnter(ClientState::Game)))
-            .add_systems((render_terrain, render_features, render_units, render_icons).in_set(OnUpdate(ClientState::Game)))
-            .add_systems((conform_transforms_tiles, conform_transforms_units, conform_transforms_features, conform_transforms_icons).after(update_transforms).in_set(OnUpdate(ClientState::Game)))
+            .add_systems(
+                (
+                    render_terrain, 
+                    render_features, 
+                    render_units, 
+                    render_unit_action_ghosts,
+                    render_icons
+                )
+                .in_set(OnUpdate(ClientState::Game))
+            )
+            .add_systems(
+                (
+                    conform_transforms_tiles, 
+                    conform_transforms_units, 
+                    conform_transforms_features, 
+                    conform_transforms_icons,
+                    conform_transforms_unit_action_ghosts
+                )
+                .after(update_transforms)
+                .in_set(OnUpdate(ClientState::Game))
+            )
             .add_system(scroll_events.in_set(OnUpdate(ClientState::Game)))
             .add_system(select_unit.in_set(OnUpdate(ClientState::Game)))
             .add_system(zoom_camera.in_set(OnUpdate(ClientState::Game)))
@@ -62,6 +81,9 @@ struct RenderedFeature;
 
 #[derive(Component)]
 struct RenderedUnit;
+
+#[derive(Component)]
+struct RenderedUnitAction;
 
 #[derive(Component)]
 pub struct RenderedIcon;
@@ -216,6 +238,54 @@ fn texture_index_from_unit_id(uid: &UnitID) -> usize {
     };
 }
 
+// Step 3.5: Unit action ghosts
+fn render_unit_action_ghosts(
+    mut commands: Commands,
+    mut rendered_units: Query<(&UnitAction, &mut TextureAtlasSprite, With<RenderedUnitAction>)>,
+    units: Query<&Unit>,
+    nonrendered_units: Query<(Entity, &UnitAction, Without<Handle<TextureAtlas>>)>,
+    spritesheet: Res<Spritesheet>
+) {
+    nonrendered_units.iter().for_each(|(e, u, ())| {
+
+        let unit_at_pos = units
+            .iter()
+            .filter(|un| u.curr_pos == un.pos)
+            .collect::<Vec<_>>()
+            [0];
+
+        let mut bundle = SpriteSheetBundle {
+            sprite: TextureAtlasSprite::new(texture_index_from_unit_id(&unit_at_pos.id)),
+            texture_atlas: spritesheet.characters.clone(),
+            ..default()
+        };
+
+        bundle.transform.scale.x *= 0.7;
+        bundle.transform.scale.y *= 0.7;
+        bundle.transform.translation.z = 50f32;
+
+        commands.entity(e).insert(bundle).insert(GameScalable).insert(RenderedUnitAction);
+    });
+
+    rendered_units.iter_mut().for_each(|(u, mut a, ())| {
+
+        let unit_at_pos = units
+            .iter()
+            .filter(|un| u.curr_pos == un.pos)
+            .collect::<Vec<_>>()
+            [0];
+
+        // Make sure the colour is right!
+        if a.color != (Color::Rgba { red: 1f32, green: 1f32, blue: 1f32, alpha: 0.7f32 }) {
+            a.color = Color::Rgba { red: 1f32, green: 1f32, blue: 1f32, alpha: 0.7f32 };
+        }
+
+        if unit_at_pos.id != unit_id_from_texture_index(a.index) {
+            a.index = texture_index_from_unit_id(&unit_at_pos.id);
+        }
+    });
+}
+
 // Step 4: Icons
 fn render_icons(
     mut commands: Commands,
@@ -326,6 +396,26 @@ fn conform_transforms_units(
     units.iter_mut().for_each(|(_e, u, mut t, ())| {
         t.translation.x = (scl.unit_scl / 32f32) * (u.pos[0] - (32 / 2)) as f32; // [gameboard_width / 2]
         t.translation.y = (scl.unit_scl / 32f32) * (u.pos[1] - (32 / 2)) as f32; // [gameboard_width / 2]
+        t.scale.x *= scl.unit_delta;
+        t.scale.y *= scl.unit_delta;
+    });
+}
+
+fn conform_transforms_unit_action_ghosts(
+    cam: Query<(&OrthographicProjection, &GameCameraScalingInfo)>, 
+    mut units: Query<(Entity, &UnitAction, &mut Transform, With<GameScalable>)>,
+) {
+
+    let scl = cam.single().1;
+
+    if scl.unit_delta > 2f32 {
+        return;
+    }
+
+    units.iter_mut().for_each(|(_e, ua, mut t, ())| {
+
+        t.translation.x = (scl.unit_scl / 32f32) * (ua.action_pos[0] - (32 / 2)) as f32; // [gameboard_width / 2]
+        t.translation.y = (scl.unit_scl / 32f32) * (ua.action_pos[1] - (32 / 2)) as f32; // [gameboard_width / 2]
         t.scale.x *= scl.unit_delta;
         t.scale.y *= scl.unit_delta;
     });

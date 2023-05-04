@@ -28,6 +28,7 @@ impl Plugin for GameLogicPlugin {
             .register_type::<TileInfo>()
             .register_type::<TurnExecuteStage>()
             .register_type::<Unit>()
+            .register_type::<UnitAction>()
             .add_system(calculate_traversable_tiles);
     }
 }
