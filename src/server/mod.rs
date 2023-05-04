@@ -1,5 +1,6 @@
 pub mod networking;
 pub mod logic;
+pub mod console;
 
 use std::time::Duration;
 use bevy::{prelude::*, log::LogPlugin, utils::{HashMap, Uuid}, time::TimePlugin};
