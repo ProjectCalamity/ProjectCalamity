@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use client::ClientPlugin;
 use common::config::{Config, RunEnvironment};
-use server::{ServerPlugin, console::{start_console, parse_command_input, ConsolePlugin}};
+use server::{ServerPlugin, console::ConsolePlugin};
 
 fn main() {
 
@@ -25,9 +25,8 @@ fn main() {
         RunEnvironment::Server => {
 
             app
-                .add_plugin(ServerPlugin)
-                .add_plugin(ConsolePlugin);
-
+                .add_plugin(ConsolePlugin)
+                .add_plugin(ServerPlugin);
         },
     };
     app
