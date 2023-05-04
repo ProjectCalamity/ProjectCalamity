@@ -22,7 +22,9 @@ impl Plugin for GameLogicPlugin {
             .register_type::<GameboardGenerationParameters>()
             .register_type::<Health>()
             .register_type::<Movement>()
+            .register_type::<PlayerTeam>()
             .register_type::<TileFeature>()
+            .register_type::<TileFeatures>()
             .register_type::<TileInfo>()
             .register_type::<TurnExecuteStage>()
             .register_type::<Unit>()
@@ -86,9 +88,9 @@ impl TileInfo {
                 let feature = feature_ref.clone().clone();
                 if feature.feature != TileFeatures::CurrencySite(Archetype(Archetypes::Science)) 
                     && feature.feature != TileFeatures::CurrencySite(Archetype(Archetypes::Magic)) {
-                    visible_features = Some(feature.feature);
+                    visible_features = Some(feature.clone());
                 } else if feature.visible_to_players.contains(&player) {
-                    visible_features = Some(feature.feature);
+                    visible_features = Some(feature.clone());
                 }
             }
         }
@@ -183,7 +185,13 @@ impl UnitAction {
                     })
                     .collect::<Vec<_>>();
                 if relevant_feature_filtered.len() == 1 {
-                    feature = Some(relevant_feature_filtered[0].feature.clone());
+                    let feature_uncloned = relevant_feature_filtered[0];
+                    // God is dead, and I have killed them
+                    feature = Some(TileFeature {
+                        pos: feature_uncloned.pos,
+                        feature: feature_uncloned.feature.clone(),
+                        visible_to_players: feature_uncloned.visible_to_players.clone(),
+                    });
                 }
 
                 server.endpoint().send_message(
@@ -192,7 +200,7 @@ impl UnitAction {
                         tile: PlayerTileInfo {
                             pos: tile.pos, 
                             geography: tile.geography, 
-                            visible_features: feature 
+                            visible_features: feature
                         } 
                     }
                 )

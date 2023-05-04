@@ -3,7 +3,7 @@ use kayak_ui::prelude::kayak_font::KayakFont;
 
 use crate::common::{networking::schema::Player, config::Config, logic::GameLogicPlugin};
 
-use self::{ui::UIPlugin, graphical::GraphicalPlugin, networking::ClientNetworkPlugin};
+use self::{graphical::GraphicalPlugin, networking::ClientNetworkPlugin};
 
 pub mod graphical;
 pub mod ui;
@@ -18,7 +18,6 @@ impl Plugin for ClientPlugin {
             .add_state::<ClientState>()
             .init_resource::<Spritesheet>()
             .init_resource::<Fonts>()
-            .add_plugin(UIPlugin)
             .add_plugin(GameLogicPlugin)
             .add_plugin(GraphicalPlugin)
             .add_plugin(ClientNetworkPlugin)
@@ -29,8 +28,8 @@ impl Plugin for ClientPlugin {
 
 #[derive(States, Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum ClientState {
-    #[default]
     MainMenu,
+    #[default]
     Game
 }
 

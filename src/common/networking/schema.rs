@@ -1,14 +1,14 @@
 use bevy::{utils::Uuid, prelude:: Component};
 use serde::{Serialize, Deserialize};
 
-use crate::common::logic::{Geography, Unit, UnitAction, Gameboard, TileFeatures};
+use crate::common::logic::{Geography, Unit, UnitAction, Gameboard, TileFeature};
 
 // Building blocks
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlayerTileInfo {
     pub pos: [i32; 2],
     pub geography: Geography,
-    pub visible_features: Option<TileFeatures>
+    pub visible_features: Option<TileFeature>
 }
 
 #[derive(Clone, Debug, Deserialize, Component, Serialize)]

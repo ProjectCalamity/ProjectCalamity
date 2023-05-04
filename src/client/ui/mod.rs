@@ -7,19 +7,28 @@ use crate::client::ui::components::{button::QuadBundle, main_menu::{PCButtonProp
 
 use self::components::button::{Quad, update_quad};
 
+use super::ClientState;
+
 pub struct UIPlugin;
 
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app
-            .register_type::<Quad>()
-            .register_type::<ScalableComponent>()
-            .register_type::<UIScalingInfo>()
-            .add_plugin(KayakContextPlugin)
-            .add_plugin(KayakWidgets)
-            .add_startup_system(setup)
-            .add_system(update_ui_scaling);
+            .add_system(skip_ui.in_schedule(OnEnter(ClientState::Game)));
+            // .register_type::<Quad>()
+            // .register_type::<ScalableComponent>()
+            // .register_type::<UIScalingInfo>()
+            // .add_plugin(KayakContextPlugin)
+            // .add_plugin(KayakWidgets)
+            // .add_startup_system(setup)
+            // .add_system(update_ui_scaling);
     }
+}
+
+fn skip_ui(mut state: ResMut<State<ClientState>>) {
+    info!("Skipping UI Stage");
+
+    state.0 = ClientState::Game;
 }
 
 #[derive(Component, Default, Reflect)]
