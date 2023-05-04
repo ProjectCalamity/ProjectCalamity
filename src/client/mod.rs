@@ -3,10 +3,10 @@ use kayak_ui::prelude::kayak_font::KayakFont;
 
 use crate::common::{networking::schema::Player, config::Config, logic::GameLogicPlugin};
 
-use self::{menus::MenusPlugin, graphical::GraphicalPlugin, networking::ClientNetworkPlugin};
+use self::{ui::UIPlugin, graphical::GraphicalPlugin, networking::ClientNetworkPlugin};
 
 pub mod graphical;
-pub mod menus;
+pub mod ui;
 pub mod networking;
 
 pub struct ClientPlugin;
@@ -18,13 +18,13 @@ impl Plugin for ClientPlugin {
             .add_state::<ClientState>()
             .init_resource::<Spritesheet>()
             .init_resource::<Fonts>()
-            .add_plugin(MenusPlugin)
+            .add_plugin(UIPlugin)
             .add_plugin(GameLogicPlugin)
             .add_plugin(GraphicalPlugin)
             .add_plugin(ClientNetworkPlugin)
             .add_startup_system(create_player)
             .add_startup_system(load_assets);
-    }
+        }
 }
 
 #[derive(States, Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
@@ -78,5 +78,7 @@ pub fn load_assets(mut commands: Commands, asset_server: Res<AssetServer>, mut t
     let regular = asset_server.load("fonts/atkinson_hyperlegible_regular.kayak_font");
     let bold = asset_server.load("fonts/atkinson_hyperlegible_bold.kayak_font");
 
-    commands.insert_resource(Fonts { regular: regular, bold: bold})
+    commands.insert_resource(Fonts { regular: regular, bold: bold});
+
+    info!("Assets loaded");
 }

@@ -1,10 +1,12 @@
-use bevy::{prelude::*, log::LogPlugin};
-
-use crate::common::{logic::{GameLogicPlugin, PlayerTeam, gameboard_gen::generate_gameboard}, networking::schema::Player, config::Config};
-
-use self::networking::{ServerNetworkPlugin, send_gameboard};
-
 pub mod networking;
+pub mod logic;
+
+use std::time::Duration;
+use bevy::{prelude::*, log::LogPlugin, utils::{HashMap, Uuid}, time::TimePlugin};
+
+use crate::{common::{logic::{GameLogicPlugin, PlayerTeam, gameboard_gen::generate_gameboard}, networking::schema::Player, config::Config}, server::logic::TurnTimer};
+use self::{networking::{ServerNetworkPlugin, send_gameboard}, logic::ServerLogicPlugin};
+
 
 pub struct ServerPlugin;
 
@@ -14,7 +16,9 @@ impl Plugin for ServerPlugin {
             .insert_resource(ServerGameManager::default())
             .add_state::<ServerState>()
             .add_plugin(GameLogicPlugin)
+            .add_plugin(ServerLogicPlugin)
             .add_plugin(LogPlugin::default())
+            .add_plugin(TimePlugin)
             .add_plugin(ServerNetworkPlugin)
             .set_runner(server_runner)
             .add_system(manage_lobby)
@@ -38,7 +42,25 @@ pub enum ServerState {
 
 #[derive(Debug, Default, Resource)]
 pub struct ServerGameManager {
-    players: Vec<(Player, PlayerTeam)>
+    pub players: Vec<(Player, PlayerTeam)>
+}
+
+impl ServerGameManager {
+    pub fn client_id(&self, team: &PlayerTeam, clients: &HashMap<u64, Uuid>) -> u64 {
+        return clients
+            .iter()
+            .filter(|(_id, uuid)| uuid == &&self.players
+                .iter()
+                .filter(|(_p, pt)| pt == team)
+                .collect::<Vec<_>>()
+                [0]
+                .0
+                .id
+            ).collect::<Vec<_>>()
+            [0]
+            .0
+            .clone();
+    }
 }
 
 pub fn manage_lobby(
@@ -54,5 +76,8 @@ pub fn manage_lobby(
             commands.spawn(p.clone()).insert(pt.clone()).insert(Name::new(format!("Player {:?}", p.username)));
         });
         info!("Lobby is full, starting game");
+        commands.spawn(TurnTimer { 
+            timer: Timer::new(Duration::from_secs(60), TimerMode::Repeating) 
+        });
     }
 }

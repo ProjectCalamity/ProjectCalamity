@@ -21,12 +21,12 @@ impl Plugin for ServerNetworkPlugin {
 
 #[derive(Default, Resource)]
 pub struct PlayerMoves {
-    map: HashMap<PlayerTeam, Vec<UnitAction>>
+    pub map: HashMap<PlayerTeam, Vec<UnitAction>>
 }
 
 #[derive(Default, Resource)]
 pub struct ClientIDMap {
-    map: HashMap<u64, Uuid>
+    pub map: HashMap<u64, Uuid>
 }
 
 #[derive(Default, Resource)]
@@ -65,6 +65,7 @@ fn handle_client_messages(
             }
         }
     }
+
     for client_id in endpoint.clients() {
         let client_messages = endpoint.try_receive_message_from::<ClientMessages>(client_id);
         if let Some(message) = client_messages {
@@ -75,7 +76,7 @@ fn handle_client_messages(
                         .players
                         .iter()
                         .filter(|(p, _pt)| 
-                            p.id == *clients
+                            &p.id == clients
                                 .map
                                 .get(&client_id)
                                 .unwrap()

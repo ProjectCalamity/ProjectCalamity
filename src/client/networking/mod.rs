@@ -1,7 +1,7 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, utils::tracing::log::info};
 use bevy_quinnet::{client::{Client, connection::ConnectionConfiguration, certificate::CertificateVerificationMode, QuinnetClientPlugin}};
 
-use crate::{common::{config::Config, networking::schema::{ServerMessages, ClientMessages, Player}, logic::{TileInfo, UnitAction}}};
+use crate::{common::{config::Config, networking::schema::{ServerMessages, ClientMessages, Player}, logic::{TileInfo, UnitAction, Unit}}};
 
 use super::graphical::inputs::TurnCompletedEvent;
 
@@ -37,7 +37,12 @@ fn send_unit_actions(mut commands: Commands, actions: Query<(Entity, &UnitAction
     });
 }
 
-fn handle_server_messages(mut commands: Commands, mut client: ResMut<Client>, player: Query<&Player>) {
+fn handle_server_messages(
+    mut commands: Commands, 
+    mut client: ResMut<Client>, 
+    player: Query<&Player>,
+    units: Query<(Entity, &Unit)>
+) {
     while let Some(msg) = client.connection_mut().try_receive_message::<ServerMessages>() {
         match msg {
             ServerMessages::CompleteGameStatePacket { tiles, units, players, gameboard } => {
@@ -76,9 +81,34 @@ fn handle_server_messages(mut commands: Commands, mut client: ResMut<Client>, pl
                         .insert(Name::new(format!("Tile Feature at ({:?})", tile.pos))); // For rendering purposes, we can ignore visible_to_players
                 }
             },
-            ServerMessages::UnitModifyPacket { prev_pos, unit } => info!("Recieved unit modification packet from server."),
-            ServerMessages::UnitRemovePacket { pos } => info!("Recieved unit removal packet from server."),
-            ServerMessages::UnitAddPacket { pos, unit } => info!("Recieved unit add packet from server."),
+            ServerMessages::UnitModifyPacket { prev_pos, unit } => {
+                units
+                    .iter()
+                    .filter(|(_e, u)| u.pos == prev_pos)
+                    .for_each(|(e, _u)| commands.entity(e).despawn());
+
+                info!("Units {:?}", units.iter().collect::<Vec<_>>());
+                
+                commands
+                    .spawn(unit.clone())
+                    .insert(Name::new(format!("Unit at ({:?})", unit.pos)));
+
+                info!("Modified unit that is now at ({:?})", unit.pos);
+            },
+            ServerMessages::UnitRemovePacket { pos } => {
+                units
+                    .iter()
+                    .filter(|(_e, u)| u.pos == pos)
+                    .for_each(|(e, _u)| commands.entity(e).despawn());
+                info!("Despawned unit that was at ({:?})", pos)
+            },
+            ServerMessages::UnitAddPacket { unit } => {
+                commands
+                    .spawn(unit.clone())
+                    .insert(Name::new(format!("Unit at ({:?})", unit.pos)));
+
+                info!("Spawned unit at ({:?})", unit.pos);
+            },
             ServerMessages::ChatMessagePacket { player, contents } => info!("{:?} » {:?}", player.username, contents),
             ServerMessages::PlayerInfo { player } => info!("Recieved player packet from server."),
             ServerMessages::PlayerInfoRequestPacket => {
@@ -86,9 +116,8 @@ fn handle_server_messages(mut commands: Commands, mut client: ResMut<Client>, pl
                 client.connection().send_message(ClientMessages::ConnectionPacket { player: player.single().clone() }).unwrap();
             },
             ServerMessages::DisconnectionPacket { message } => info!("Disconnected from server: {:?}", message),
-            ServerMessages::TestPacket { message, tile_info } => {
-                info!("Recieved test packet containing {:?} AND {:?}", message, tile_info);
-                commands.spawn(TileInfo { pos: tile_info.pos.clone(), geography: tile_info.geography.clone(), visible_to_players: Vec::new() });
+            ServerMessages::TestPacket { message } => {
+                info!("Recieved test packet containing {:?}", message)
             }
         }
     }

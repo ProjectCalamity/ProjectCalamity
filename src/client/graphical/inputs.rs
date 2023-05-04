@@ -1,8 +1,8 @@
 use bevy::{prelude::*, input::mouse::{MouseWheel, MouseMotion}};
 
-use crate::common::logic::{Unit, TileInfo, Gameboard, TraversableTiles, UnitAction, UnitActions, TurnExecuteStage, TurnExecuteStages};
+use crate::{common::logic::{Unit, TileInfo, Gameboard, TraversableTiles, UnitAction, UnitActions}, client::graphical::{Icon, Icons, GameScalable}};
 
-use super::{GameCameraScalingInfo, Icon, Icons, GameScalable, RenderedIcon};
+use super::{GameCameraScalingInfo, RenderedIcon};
 
 pub struct TurnCompletedEvent;
 
@@ -104,71 +104,102 @@ pub fn mouse_click_events(
 pub fn select_unit(
     mut commands: Commands,
     mut click_evr: EventReader<GridPosClickEvent>,
-    mut units: Query<(&mut Unit, &TraversableTiles)>,
+    units: Query<(&mut Unit, &TraversableTiles)>,
     selected: Query<(Entity, &SelectedUnit)>,
     icons: Query<(Entity, &RenderedIcon)>,
     actions: Query<(Entity, &UnitAction)>
 ) {
-    // First despawn all other icons 
-    if click_evr.len() >= 1 {
-        selected.for_each(|(e, _su)| commands.entity(e).despawn_recursive());
-    }
+    for click_event in click_evr.iter() {
+        // Get rid of all pre-existing icons
+        icons.iter().for_each(|(e, _)| commands.entity(e).despawn_recursive());
 
-    click_evr.iter().for_each(|gpce| {
+        // Wherever we click, we definitely want to despawn all icons
+        icons.iter().for_each(|(e, _)| commands.entity(e).despawn_recursive());
+        
+        // We already have a unit selected; now we're selecting it's position
+        if selected.iter().len() == 1 {
+            let selection_pos = selected.single().1.0;
+            // Ensure that the move is
+            //    a) Valid
+            //    b) Possible
+            let unit_vec = units
+                .iter()
+                .filter(|(u, t)| 
+                    u.pos == selection_pos && 
+                    t.0.contains(&[click_event.x_grid, click_event.y_grid]) 
+                )
+                .collect::<Vec<_>>();
+            if unit_vec.len() == 1 {
 
-        // Try to move
-        if selected.iter().len() >= 1 {
-            let mut filtered_units = Vec::<(Mut<Unit>, &TraversableTiles)>::new();
-            
-            let selected_u = selected.single();
+                let (unit, _) = unit_vec[0];
 
-            units
-                .iter_mut()
-                .filter(|(u, _tt)| u.pos == selected_u.1.0)
-                .for_each(|f| filtered_units.push(f));
-            
-            filtered_units
-                .iter_mut()
-                .filter(|(_u, tt)| tt.0.contains(&[gpce.x_grid, gpce.y_grid]))
-                .collect::<Vec<_>>()
-                .iter_mut()
-                .for_each(|(u, _tt)| { 
-                    // Ensure that we haven't already set another movement for this unit
-                    let existing_actions = actions
-                        .iter()
-                        .filter(|(_e, a)| a.curr_pos == u.pos)
-                        .collect::<Vec<_>>();
+                // Despawn all previous UnitActions pertaining to this unit
+                actions
+                    .iter()
+                    .filter(|(_, a)| a.curr_pos == selection_pos)
+                    .for_each(|(e, _)| commands.entity(e).despawn_recursive());
 
-                    for (e, _a) in existing_actions {
-                        commands.entity(e).despawn_recursive();
-                    }
-                    
-                    // Spawn unit action
-                    commands.spawn(
-                    UnitAction { 
-                        action_type: UnitActions::Move, 
-                        turn_stage: TurnExecuteStage(TurnExecuteStages::MidTurn), 
-                        curr_pos: u.pos.clone(), 
-                        action_pos: [gpce.x_grid, gpce.y_grid].clone(),
-                    }).insert(Name::new("Unit Action"));
-
-
+                // Spawn a new UnitAction
+                // TODO: Deal with other action type contingencies
+                commands.spawn(UnitAction {
+                    action_type: UnitActions::Move,
+                    turn_stage: unit.turn_execute_stage.clone(),
+                    curr_pos: unit.pos,
+                    action_pos: [click_event.x_grid, click_event.y_grid],
                 });
-            
-            icons.for_each(|(e, _)| commands.entity(e).despawn_recursive());
-            
-        } else {
-            units.iter().for_each(|(u, tt)| {
-                if (u.pos[0] == gpce.x_grid) && (u.pos[1] == gpce.y_grid) {
-                    commands.spawn(Icon { icon: Icons::Selector, pos: u.pos.clone() }).insert(GameScalable).insert(Name::new("Icon"));
-                    tt.0.iter().for_each(|t| {
-                        commands.spawn(Icon { icon: Icons::Circle, pos: t.clone() }).insert(GameScalable).insert(Name::new("Icon"));
-                    });
-                    commands.spawn(SelectedUnit(u.pos.clone()));
-                }
-            })
+
+                // Deselect unit, and despawn icons
+                selected.iter().for_each(|(e, _)| commands.entity(e).despawn_recursive());
+            }
         }
-    })
+
+        // No unit is selected, and thus we should attempt to select the unit at the click event
+        if selected.iter().len() == 0 {
+
+            let unit_vec = units
+                .iter()
+                .filter(|(u, _)| 
+                    u.pos == [click_event.x_grid, click_event.y_grid]
+                )
+                .collect::<Vec<_>>();
+
+            // Select a unit if it's there
+            if unit_vec.len() == 1 {
+                
+                // Select
+                commands.spawn(
+                    SelectedUnit([click_event.x_grid, click_event.y_grid])
+                )
+                .insert(Name::new("Selected Unit"));
+
+                // Spawn icons
+                commands
+                    .spawn(Icon { 
+                        icon: Icons::Selector, 
+                        pos: [click_event.x_grid, click_event.y_grid]
+                    })
+                    .insert(GameScalable)
+                    .insert(Name::new("Selector"));
+
+                unit_vec[0].1.0
+                    .iter()
+                    .for_each(|pos| {
+                    commands
+                        .spawn(Icon { 
+                            icon: Icons::Circle, 
+                            pos: pos.clone()
+                        })
+                        .insert(GameScalable)
+                        .insert(Name::new("Movable Tile"));
+                });            
+            }
+        }
+
+        if selected.iter().len() > 1 {
+            info!("More than one unit is selected, this shouldn't be possible. Deselecting all units.");
+            selected.iter().for_each(|(e, _)| commands.entity(e).despawn_recursive());
+        }
+    }
 
 }
 

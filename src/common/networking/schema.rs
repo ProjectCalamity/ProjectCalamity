@@ -1,14 +1,14 @@
 use bevy::{utils::Uuid, prelude:: Component};
 use serde::{Serialize, Deserialize};
 
-use crate::common::logic::{Geography, TileFeature, Unit, UnitAction, Gameboard};
+use crate::common::logic::{Geography, Unit, UnitAction, Gameboard, TileFeatures};
 
 // Building blocks
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlayerTileInfo {
     pub pos: [i32; 2],
     pub geography: Geography,
-    pub visible_features: Option<TileFeature>
+    pub visible_features: Option<TileFeatures>
 }
 
 #[derive(Clone, Debug, Deserialize, Component, Serialize)]
@@ -22,7 +22,6 @@ pub struct Player {
 pub enum ServerMessages {
     TestPacket {
         message: String,
-        tile_info: PlayerTileInfo
     },
     CompleteGameStatePacket {
         tiles: Vec<PlayerTileInfo>,
@@ -41,7 +40,6 @@ pub enum ServerMessages {
         pos: [i32; 2],
     },
     UnitAddPacket {
-        pos: [i32; 2],
         unit: Unit
     },
     ChatMessagePacket {

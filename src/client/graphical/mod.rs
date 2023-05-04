@@ -19,7 +19,7 @@ impl Plugin for GraphicalPlugin {
             .add_event::<PanEvent>()
             .add_event::<TurnCompletedEvent>()
             .add_event::<ZoomEvent>()
-            .add_startup_system(spawn_camera)
+            // .add_startup_system(spawn_camera)
             .add_system(setup_scaling.in_schedule(OnEnter(ClientState::Game)))
             .add_systems((render_terrain, render_features, render_units, render_icons).in_set(OnUpdate(ClientState::Game)))
             .add_systems((conform_transforms_tiles, conform_transforms_units, conform_transforms_features, conform_transforms_icons).after(update_transforms).in_set(OnUpdate(ClientState::Game)))
@@ -130,13 +130,13 @@ fn texture_index_from_geography(geo: &Geography) -> usize {
 // Step 2: Features
 fn render_features(
     mut commands: Commands,
-    mut rendered_features: Query<(&TileFeature, &mut TextureAtlasSprite, With<RenderedFeature>)>,
-    nonrendered_features: Query<(Entity, &TileFeature, Without<Handle<TextureAtlas>>)>,
+    mut rendered_features: Query<(&TileFeatures, &mut TextureAtlasSprite, With<RenderedFeature>)>,
+    nonrendered_features: Query<(Entity, &TileFeatures, Without<Handle<TextureAtlas>>)>,
     spritesheet: Res<Spritesheet>
 ) {
     nonrendered_features.iter().for_each(|(e, tf, ())| {
         let mut bundle = SpriteSheetBundle {
-            sprite: TextureAtlasSprite::new(texture_index_from_tile_feature(&tf.feature)),
+            sprite: TextureAtlasSprite::new(texture_index_from_tile_feature(&tf)),
             texture_atlas: spritesheet.tile_icons.clone(),
             ..default()
         };
@@ -149,8 +149,8 @@ fn render_features(
     });
 
     rendered_features.iter_mut().for_each(|(tf, mut a, ())| {
-        if tf.feature != tile_feature_from_texture_index(a.index) {
-            a.index = texture_index_from_tile_feature(&tf.feature);
+        if tf != &tile_feature_from_texture_index(a.index) {
+            a.index = texture_index_from_tile_feature(&tf);
         }
     });
 }
@@ -373,7 +373,7 @@ fn setup_scaling(mut commands: Commands, orth_q: Query<(Entity, &OrthographicPro
     });
 }
 
-fn spawn_camera(mut commands: Commands) {
-    let cam = Camera2dBundle::default();
-    commands.spawn(cam).insert(GameCamera);
-}
+// fn spawn_camera(mut commands: Commands) {
+//     let cam = Camera2dBundle::default();
+//     commands.spawn(cam).insert(GameCamera);
+// }

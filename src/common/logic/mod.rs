@@ -1,12 +1,15 @@
 pub mod units;
 pub mod gameboard_gen;
 
-use bevy::prelude::*;
+use bevy::{prelude::*};
+use bevy_quinnet::server::Server;
 use serde::{Serialize, Deserialize};
+
+use crate::server::{networking::ClientIDMap, ServerGameManager};
 
 use self::{units::UnitID, gameboard_gen::GameboardGenerationParameters};
 
-use super::networking::schema::PlayerTileInfo;
+use super::networking::schema::{PlayerTileInfo, ServerMessages};
 pub struct GameLogicPlugin;
 
 impl Plugin for GameLogicPlugin {
@@ -26,132 +29,6 @@ impl Plugin for GameLogicPlugin {
             .add_system(calculate_traversable_tiles);
     }
 }
-
-/*
-
-Some unit moves specs
-
-All players send a UnitMoves struct, containing:
- - Type
-    -> Move
-    -> Attack
-    -> Heal
-    -> Build
- - Initial unit position [we can get the unit from this]
- - Desired position
-
-Then, we (in 3 stages, doing this for each stage):
- - Check that the tile is within movement/range of the unit
- - Provisionally perform the actions of the move
- - Check for conflicts
- - Continue to next stage
-
-Finally we return gamestate
-*/
-
-// I'll write this as a normal fn for now, and deal with Bevy's shitfuckery later
-// fn execute_move(mut commands: Commands, tiles: Query<(Entity, &mut TileInfo, Option<&mut Unit>)>, actions: Query<(Entity, &UnitAction)>) {
-
-//     // We literally don't even have the components to perform a single move...
-//     if tiles.iter().len() < 2 || actions.iter().len() < 1 {
-//         return;
-//     }
-
-//     // PRE-TURN - movements, some attacks
-//     actions.iter().for_each(|(entity, action)| {
-//         // Input sanitisation? Never met her.
-//         // Move out of the fucking board. I dare you. I double dare you. I TRIPLE dare you.
-//         // TODO: refine distence calcs
-
-//         let binding_one = tiles
-//             .iter()
-//             .filter(|(_e, t, _u)| t.pos[0] == action.action_pos[0] && t.pos[1] == action.action_pos[1])
-//             .collect::<Vec<(Entity, &TileInfo, Option<&Unit>)>>();
-//         let act_t = binding_one
-//             .get(0)
-//             .unwrap();
-//         let binding_two = tiles
-//             .iter()
-//             .filter(|(_e, t, _u)| t.pos[0] == action.curr_pos[0] && t.pos[1] == action.curr_pos[1])
-//             .collect::<Vec<(Entity, &TileInfo, Option<&Unit>)>>();
-//         let curr_t = binding_two
-//             .get(0)
-//             .unwrap();
-//         let dist = (action.action_pos[0] - action.curr_pos[0]).abs() + (action.action_pos[1] - action.curr_pos[1]).abs();
-//         // STEP 1: Check
-//         if action.action_type == UnitActions::Move {
-//             if let Some(unit) = curr_t.2 {
-//                 if dist > unit.movement.0 {
-//                     // This is what happens when you don't read my code comments.
-//                     // *Stay inside the board*
-//                     return;
-//                 }
-//                 else {
-//                 // Move.
-//                     commands.entity(curr_t.0).remove::<Unit>();
-//                     commands.entity(act_t.0).insert(Unit {
-//                         ..Default::default()
-//                     });
-//                 }
-//             }
-//             else {
-//                 return
-//             }
-//         }
-//     // TODO: Handle other types
-//     // (Attack, Heal and Build)
-
-//         commands.entity(entity).remove::<UnitAction>();
-//     })
-
-// }
-
-// ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-// ;;                                                                            ;;
-// ;;          ----==| N O T   I N   U S E   C U R R E N T L Y |==----           ;;
-// ;;                                                                            ;;
-// ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-/*
-fn exec_action(mut commands: Commands, action: &UnitAction, tiles: Query<(Entity, &mut Tile, &Movement)>) {
-    // Input sanitisation? Never met her.
-    // Move out of the fucking board. I dare you. I double dare you. I TRIPLE dare you.
-    // TODO: refine distence calcs
-
-    let binding = tiles
-        .iter()
-        .filter(|(_e, t, _m)| t.pos[0] == action.action_pos[0] && t.pos[1] == action.action_pos[1])
-        .collect::<Vec<(Entity, &Tile, &Movement)>>();
-    let act_t = binding
-        .get(0)
-        .unwrap();
-    let binding = tiles
-        .iter()
-        .filter(|(_e, t, _m)| t.pos[0] == action.curr_pos[0] && t.pos[1] == action.curr_pos[1])
-        .collect::<Vec<(Entity, &Tile, &Movement)>>();
-    let curr_t = binding
-        .get(0)
-        .unwrap();
-    let dist = (action.action_pos[0] - action.curr_pos[0]).abs() + (action.action_pos[1] - action.curr_pos[1]).abs();
-    if action.action_type == UnitActions::Move {
-        if dist > curr_t.2.0 {
-            // This is what happens when you don't read my code comments.
-            // *Stay inside the board*
-            return;
-        }
-        else {
-        // Move.
-            eprintln!("Moving unit {:?} to {:?}", curr_t.1.pos, act_t.1.pos);
-            commands.entity(curr_t.0).remove::<Unit>();
-            commands.entity(act_t.0).insert(Unit {
-                ..Default::default()
-            });
-        }
-    }
-    // TODO: Handle other types
-    // (Attack, Heal and Build)
-}
- */
 
 fn calculate_traversable_tiles(
     mut commands: Commands,
@@ -176,6 +53,10 @@ fn calculate_traversable_tiles(
 
 #[derive(Component, FromReflect, Reflect)]
 pub struct TraversableTiles(pub Vec<[i32; 2]>);
+
+#[derive(Component, FromReflect, Reflect)]
+pub struct ViewableTiles(pub Vec<[i32; 2]>);
+
 
 #[derive(Clone, Component, Debug, Deserialize, Reflect, Serialize)]
 pub struct Gameboard {
@@ -205,14 +86,18 @@ impl TileInfo {
                 let feature = feature_ref.clone().clone();
                 if feature.feature != TileFeatures::CurrencySite(Archetype(Archetypes::Science)) 
                     && feature.feature != TileFeatures::CurrencySite(Archetype(Archetypes::Magic)) {
-                    visible_features = Some(feature);
+                    visible_features = Some(feature.feature);
                 } else if feature.visible_to_players.contains(&player) {
-                    visible_features = Some(feature);
+                    visible_features = Some(feature.feature);
                 }
             }
         }
 
-        return PlayerTileInfo { geography: geography, pos: self.pos, visible_features: visible_features };
+        return PlayerTileInfo { 
+            geography: geography, 
+            pos: self.pos, 
+            visible_features: visible_features
+        };
     }
 }
 
@@ -235,6 +120,136 @@ pub struct UnitAction {
     pub turn_stage: TurnExecuteStage,
     pub curr_pos: [i32; 2],
     pub action_pos: [i32; 2]
+}
+
+impl UnitAction {
+    pub fn apply(
+        &self, 
+        server: &Server,
+        units_q: &mut Vec<Mut<Unit>>,
+        tiles: &mut Vec<Mut<TileInfo>>,
+        tile_features: &mut Vec<Mut<TileFeature>>,
+        game_manager: &ServerGameManager,
+        clients: &ClientIDMap,
+    ) {
+        if self.action_type == UnitActions::Move {
+            // Move
+            // Server
+            let mut units = units_q
+                .iter_mut()
+                .filter(|u| u.pos == self.curr_pos)
+                .collect::<Vec<_>>();
+
+            let unit = units.get_mut(0).unwrap();
+
+            unit.pos = self.action_pos;
+
+            // Reveal tiles
+            // Calculate viewable tiles
+            let tiles_to_reveal = tiles
+                .iter_mut()
+                .filter(|tile| 
+                    (unit.pos[0] - tile.pos[0]).abs()
+                    + (unit.pos[1] - tile.pos[1]).abs()
+                    <= unit.movement.0
+                    && !tile.visible_to_players.contains(&unit.owner)
+                )
+                .map(|t| {
+                    t.visible_to_players.push(unit.owner.clone());
+                    return t;
+                })
+                .collect::<Vec<_>>();
+
+            let client_id = game_manager.client_id(&unit.owner, &clients.map);
+            
+            // Register tiles as visible to client on server
+
+            tiles_to_reveal.iter().for_each(|tile| {
+
+                let mut feature = None;
+
+                let relevant_feature_filtered = tile_features
+                    .iter()
+                    .filter_map(|tf| {
+                        if tf.pos == tile.pos {
+                            if let TileFeatures::Nest(_) = tf.feature {
+                                return Some(tf);
+                            } else {
+                                return None;
+                            }
+                        } else {
+                            return None;
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                if relevant_feature_filtered.len() == 1 {
+                    feature = Some(relevant_feature_filtered[0].feature.clone());
+                }
+
+                server.endpoint().send_message(
+                    client_id.clone(),
+                    ServerMessages::PlayerTileInfoPacket { 
+                        tile: PlayerTileInfo {
+                            pos: tile.pos, 
+                            geography: tile.geography, 
+                            visible_features: feature 
+                        } 
+                    }
+                )
+                .unwrap();
+            });
+
+            // Move client-side (only those that can see the tile on which this unit is)
+            // We need to reveal before moving, so that we can see the tile that the unit moves to
+            // We also need to make sure we despawn the unit from the client's perspective if it moves out
+            // of territory that they know about
+
+            let tile_at_unit_pos = &tiles
+                .iter()
+                .filter(|t| t.pos == self.action_pos)
+                .collect::<Vec<_>>()
+                [0];
+            
+            let visible_clients = tile_at_unit_pos
+                .visible_to_players
+                .iter()
+                .map(|t| game_manager.client_id(t, &clients.map))
+                .collect::<Vec<_>>();
+                
+            visible_clients
+                .iter()
+                .for_each(|id| { 
+                    server
+                        .endpoint()
+                        .send_message(
+                            id.clone(), 
+                            ServerMessages::UnitModifyPacket { 
+                                prev_pos: self.curr_pos, 
+                                // For some reason, `clone()` wouldn't work, so we have to do this godforsaken bullshit
+                                unit: Unit { 
+                                    id: unit.id.clone(), 
+                                    pos: unit.pos.clone(), 
+                                    health: unit.health.clone(), 
+                                    attack: unit.attack.clone(), 
+                                    defense: unit.defense.clone(), 
+                                    movement: unit.movement.clone(), 
+                                    turn_execute_stage: unit.turn_execute_stage.clone(), 
+                                    archetype: unit.archetype.clone(), 
+                                    owner: unit.owner.clone() 
+                                }
+                            }
+                        )
+                        .unwrap(); 
+                    }
+                );
+        }
+
+        // TODO: Special
+
+        else if self.action_type == UnitActions::Attack {
+            info!("ATTACK ACTION TODO")
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Reflect, PartialEq, Serialize)]

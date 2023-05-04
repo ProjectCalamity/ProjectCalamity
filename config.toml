@@ -7,7 +7,7 @@ debug = "true"
 connection_address = "127.0.0.1:2360"
 
 [server]
-# Must be between 2 and 3
+# Must be between 2 and 4
 max_players = 2
 
 [client]
