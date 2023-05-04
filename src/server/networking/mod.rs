@@ -11,13 +11,18 @@ impl Plugin for ServerNetworkPlugin {
     fn build(&self, app: &mut App) {
         app
             .add_plugin(QuinnetServerPlugin::default())
+            .add_event::<SendGameboardEvent>()
             .init_resource::<ClientIDMap>()
             .init_resource::<NetworkState>()
             .init_resource::<PlayerMoves>()
             .add_startup_system(start_listener)
-            .add_system(handle_client_messages);
+            .add_system(handle_client_messages)
+            .add_system(init_send_gameboard);
     }
 }
+
+// Here `None` means "send to all clients"
+pub struct SendGameboardEvent(pub Option<Vec<u64>>);
 
 #[derive(Default, Resource)]
 pub struct PlayerMoves {
@@ -108,35 +113,58 @@ fn handle_client_messages(
     }
 }
 
+fn init_send_gameboard(
+    mut send_gameboard_evw: EventWriter<SendGameboardEvent>,
+    network_state: ResMut<NetworkState>,
+    tiles: Query<&TileInfo>
+) {
+    if !network_state.sent_init_gameboard && tiles.iter().len() > 0 {
+        send_gameboard_evw.send(SendGameboardEvent(None));
+    }
+}
+
 pub fn send_gameboard(
     mut server: ResMut<Server>, 
     clients: Res<ClientIDMap>,
     tiles: Query<&TileInfo>,
     tile_features: Query<&TileFeature>,
-    players: Query<(&Player, &PlayerTeam)>,
+    players_q: Query<(&Player, &PlayerTeam)>,
     units: Query<&Unit>,
     mut network_state: ResMut<NetworkState>,
-    gameboard_q: Query<&Gameboard>
+    gameboard_q: Query<&Gameboard>,
+    mut send_gameboard_event: EventReader<SendGameboardEvent>
 ) {
-    if !network_state.sent_init_gameboard && tiles.iter().len() > 0 {
+    for event in send_gameboard_event.iter() {
         
         network_state.sent_init_gameboard = true;
 
-        info!("Sending gameboard to players");
+        let clients_vec = &clients.map.iter().map(|(cid, _)| return cid.clone()).collect::<Vec<u64>>();
 
-        players.iter().for_each(|(p, pt)| {
-            let eqiv_uuid = clients
+        let players = match &event.0 {
+            Some(p) => p,
+            None => clients_vec,
+        };
+
+        players.iter().for_each(|client_id| {
+            let uuid = clients
                 .map
                 .iter()
-                .filter(|(_id, uuid)| uuid == &&p.id)
-                .collect::<Vec<(&u64, &Uuid)>>()
+                .filter(|(id, _)| id == &client_id)
+                .collect::<Vec<_>>()
+                [0]
+                .1;
+
+            let (_, team) = players_q
+                .iter()
+                .filter(|(p, _)| &p.id == uuid)
+                .collect::<Vec<_>>()
                 [0];
             
             let tiles_vec = tiles
                 .iter()
                 .map(|ti| 
                     return ti.player_tile_info(
-                        pt.clone(), 
+                        team.clone(), 
                         tile_features
                             .iter()
                             .filter(|tf| tf.pos == ti.pos)
@@ -155,14 +183,15 @@ pub fn send_gameboard(
             server
                 .endpoint_mut()
                 .send_message(
-                    eqiv_uuid.0.clone(), 
+                    client_id.clone(), 
                     ServerMessages::CompleteGameStatePacket { 
                         tiles: tiles_vec, 
                         units: units.iter().filter(|u| pos_vec.contains(&u.pos)).map(|u| u.clone()).collect::<Vec<Unit>>(), 
                         players: Vec::new(),
                         gameboard: gameboard_q.single().clone()
                     }
-                ).unwrap();
+                )
+                .unwrap();
         })
     }
 }

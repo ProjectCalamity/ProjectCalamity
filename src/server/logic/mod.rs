@@ -76,7 +76,6 @@ fn execute_turn(
     }
 
     info!("Unit actions: {:?}", actions.iter().collect::<Vec<_>>());
-    // TODO: Cleanup -> use TileInfo::reveal() instead of this...
     for stage in stages {
         for action in actions.iter() {
             if action.turn_stage.0 == stage {

@@ -4,7 +4,7 @@ use bevy_quinnet::server::Server;
 
 use crate::common::{networking::schema::Player, logic::{TileInfo, TileFeature}};
 
-use super::{ServerGameManager, networking::ClientIDMap};
+use super::{ServerGameManager, networking::{ClientIDMap, SendGameboardEvent}};
 
 /*
 
@@ -25,6 +25,7 @@ impl Plugin for ConsolePlugin {
             .add_event::<DebugRevealEvent>()
             .insert_non_send_resource(start_console())
             .add_system(debug_players)
+            .add_system(debug_reveal)
             .add_system(parse_command_input);
     }
 }
@@ -112,8 +113,8 @@ fn debug_reveal(
     features: Query<&TileFeature>,
     players: Query<&Player>,
     sgm: Res<ServerGameManager>,
+    mut send_gameboard_evw: EventWriter<SendGameboardEvent>,
     cidm: Res<ClientIDMap>,
-    server: Res<Server>
 ) {
     evr.iter().for_each(|dre| {
 
@@ -152,8 +153,9 @@ fn debug_reveal(
                             Some(f) => Some(f.clone().clone()),
                             None => None,
                         };
-                        t.reveal(player_team.clone(), client_id, &server, feature);
+                        t.reveal(player_team.clone(), feature);
                     });
+                send_gameboard_evw.send(SendGameboardEvent(Some(vec![client_id])));
                 info!("Revealed the entire map for player {:?}", player.id);
             },
             None => {

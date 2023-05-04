@@ -6,7 +6,7 @@ use std::time::Duration;
 use bevy::{prelude::*, log::LogPlugin, utils::{HashMap, Uuid}, time::TimePlugin};
 
 use crate::{common::{logic::{GameLogicPlugin, PlayerTeam, gameboard_gen::generate_gameboard}, networking::schema::Player, config::Config}, server::logic::TurnTimer};
-use self::{networking::{ServerNetworkPlugin, send_gameboard}, logic::ServerLogicPlugin};
+use self::{networking::{ServerNetworkPlugin, send_gameboard, SendGameboardEvent}, logic::ServerLogicPlugin};
 
 
 pub struct ServerPlugin;

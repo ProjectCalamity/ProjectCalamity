@@ -77,21 +77,9 @@ pub struct TileInfo {
 
 impl TileInfo {
 
-    pub fn reveal(&mut self, player: PlayerTeam, client_id: u64, server: &Server, feature: Option<TileFeature>) {
+    pub fn reveal(&mut self, player: PlayerTeam, feature: Option<TileFeature>) {
         // Register to self as revealed
         self.visible_to_players.push(player);
-        // Send info to player
-        server.endpoint().send_message(
-            client_id, 
-            ServerMessages::PlayerTileInfoPacket { 
-                tile: PlayerTileInfo { 
-                    pos: self.pos, 
-                    geography: self.geography, 
-                    visible_features: feature
-                } 
-            }
-        )
-        .unwrap();
     }
 
     pub fn player_tile_info(&self, player: PlayerTeam, feature: Option<&&TileFeature>) -> PlayerTileInfo {
