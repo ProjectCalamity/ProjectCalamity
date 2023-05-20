@@ -24,8 +24,8 @@ pub fn generate_gameboard(
 
         let gameboard = Gameboard {
             name: "Testing Game".to_string(),
-            max_x: 32,
-            max_y: 32,
+            max_x: 64,
+            max_y: 64,
         };
 
         let params = GameboardGenerationParameters {

@@ -2,7 +2,7 @@ use bevy::{prelude::*, input::mouse::{MouseWheel, MouseMotion}};
 
 use crate::{common::logic::{Unit, TileInfo, Gameboard, TraversableTiles, UnitAction, UnitActions}, client::graphical::{Icon, Icons, GameScalable}};
 
-use super::{GameCameraScalingInfo, RenderedIcon};
+use super::{GameCameraScalingInfo, RenderedIcon, GameCamera};
 
 pub struct TurnCompletedEvent;
 
@@ -205,9 +205,9 @@ pub fn select_unit(
 
 pub fn zoom_camera(
     mut zoom_evr: EventReader<ZoomEvent>,
-    mut cam: Query<&mut Transform, With<Camera2d>>
+    mut cam: Query<(&mut Transform, With<Camera2d>, With<GameCamera>)>
 ) {
-    let mut transform = cam.single_mut();
+    let (mut transform, _, _) = cam.single_mut();
     zoom_evr.iter().for_each(|ev| {
 
         let pot_x = transform.scale.x * ev.zoom;
@@ -230,7 +230,7 @@ pub fn zoom_camera(
 
 pub fn scroll_camera(
     mut pan_evr: EventReader<PanEvent>,
-    mut cam: Query<(&mut Transform, With<Camera2d>)>
+    mut cam: Query<(&mut Transform, With<Camera2d>, With<GameCamera>)>
 ) {
 
     const SENATIVITY: f32 = 0.7;

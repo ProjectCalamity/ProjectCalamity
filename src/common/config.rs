@@ -8,10 +8,9 @@ use toml::Table;
 pub struct Config {
     pub env: RunEnvironment,
     pub debug: bool,
-    // TODO: Remove this!
     pub connection_address: String,
-    pub server_config: Option<ServerConfig>,
-    pub client_config: Option<ClientConfig>
+    pub server_config: ServerConfig,
+    pub client_config: ClientConfig
 }
 
 #[derive(Debug, Default, Resource)]
@@ -21,7 +20,7 @@ pub struct ServerConfig {
 
 #[derive(Debug, Default, Resource)]
 pub struct ClientConfig {
-    pub username: String
+    pub username: String,
 }
 
 impl Config {
@@ -38,6 +37,7 @@ impl Config {
                 match conf_toml["environment"].as_str() {
                     Some("client") => {config.env = RunEnvironment::Client},
                     Some("server") => {config.env = RunEnvironment::Server},
+                    Some("singleplayer") => {config.env = RunEnvironment::Singleplayer}
                     _ => {warn!("Unable to read environment due to an invalid character sequence. Continuing with default values.")}
                 }
 
@@ -65,14 +65,15 @@ impl Config {
                     }
                     
                     server_conf.max_players = players;
-                    config.server_config = Some(server_conf);
+                    config.server_config = server_conf;
                 } else if config.env == RunEnvironment::Client {
 
                     let mut client_conf = ClientConfig::default();
 
                     let conf_toml_client = &toml["client"];
                     client_conf.username = conf_toml_client["username"].as_str().unwrap().to_string();
-                    config.client_config = Some(client_conf);
+
+                    config.client_config = client_conf;
                 }
             },
             Err(err) => {
@@ -89,5 +90,6 @@ impl Config {
 pub enum RunEnvironment {
     #[default]
     Client,
-    Server
+    Server,
+    Singleplayer
 }

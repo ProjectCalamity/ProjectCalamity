@@ -1,6 +1,6 @@
 [configuration]
-# Can be "server", "client"
-environment = "client"
+# Can be "server", "client", or "singleplayer"
+environment = "singleplayer"
 # Can be "true" or "false"
 debug = "true"
 # Address to start endpoint, or to conect to depending on environment
@@ -11,4 +11,4 @@ connection_address = "127.0.0.1:2360"
 max_players = 2
 
 [client]
-username = "1234"
+username = "AuroraEchoes"

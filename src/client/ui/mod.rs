@@ -3,9 +3,7 @@ pub mod components;
 use bevy::prelude::*;
 use kayak_ui::prelude::{*, widgets::*};
 
-use crate::client::ui::components::{button::QuadBundle, main_menu::{PCButtonProps, render_button, PCButtonBundle}};
-
-use self::components::button::{Quad, update_quad};
+use crate::client::{graphical::GameCamera, ui::components::turn_timer::{TurnTimerWidget, TurnTimerWidgetState, turn_timer_widget_render}};
 
 use super::ClientState;
 
@@ -14,21 +12,16 @@ pub struct UIPlugin;
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app
-            .add_system(skip_ui.in_schedule(OnEnter(ClientState::Game)));
-            // .register_type::<Quad>()
-            // .register_type::<ScalableComponent>()
-            // .register_type::<UIScalingInfo>()
-            // .add_plugin(KayakContextPlugin)
-            // .add_plugin(KayakWidgets)
-            // .add_startup_system(setup)
-            // .add_system(update_ui_scaling);
+            .add_plugin(KayakContextPlugin)
+            .add_plugin(KayakWidgets)
+            .add_startup_system(startup);
     }
 }
 
-fn skip_ui(mut state: ResMut<State<ClientState>>) {
-    info!("Skipping UI Stage");
+pub struct ProjectCalamityConsts;
 
-    state.0 = ClientState::Game;
+impl ProjectCalamityConsts {
+    pub const BUTTON_BACKGROUND: Color = Color::Rgba { red: 0f32, green: 0f32, blue: 0f32, alpha: 0.4f32 };
 }
 
 #[derive(Component, Default, Reflect)]
@@ -44,64 +37,54 @@ struct UIScalingInfo {
     initial_scale: Vec2,
 }
 
-fn update_ui_scaling(
-    camera: Query<(&UIScalingInfo, &OrthographicProjection, With<CameraUIKayak>)>,
-    mut components: Query<&mut ScalableComponent>
-
+fn startup(
+    mut commands: Commands,
+    mut font_mapping: ResMut<FontMapping>,
+    asset_server: Res<AssetServer>,
+    mut state: ResMut<State<ClientState>>,
 ) {
-    let (scale, projection, ()) = camera.single();
-
-    let (m_x, m_y) = (projection.area.width() / scale.initial_scale.x, projection.area.height() / scale.initial_scale.y);
-    // info!("Scaling by {:?} {:?} | {:?}", m_x, m_y, scale.initial_scale);
-
-    // for mut component in components.iter_mut() {
-    //     component.actual_pos.x = component.base_pos.x * m_x;
-    //     component.actual_pos.y = component.base_pos.y * m_x;
-
-    //     component.actual_scale.x = component.base_scale.x * m_x;
-    //     component.actual_scale.y = component.base_scale.x * m_y;
-    // }
-
-}
-
-fn setup(
-    mut commands: Commands
-) {
-
-    let camera_bundle = Camera2dBundle::default();
-
-    let area = camera_bundle.projection.area;
+    font_mapping.set_default(asset_server.load("fonts/atkinson_hyperlegible_regular.kayak_font"));
+    font_mapping.add("regular", asset_server.load("fonts/atkinson_hyperlegible_regular.kayak_font"));
+    font_mapping.add("bold", asset_server.load("fonts/atkinson_hyperlegible_bold.kayak_font"));
 
     let camera_entity = commands
-        .spawn(camera_bundle)
+        .spawn(Camera2dBundle::default())
         .insert(CameraUIKayak)
-        .insert(UIScalingInfo { 
-            initial_scale: Vec2 { 
-                x: area.width(),
-                y: area.height(),  
-            }
-        })
+        .insert(GameCamera)
         .id();
 
     let mut widget_context = KayakRootContext::new(camera_entity);
     widget_context.add_plugin(KayakWidgetsContextPlugin);
+    widget_context.add_widget_data::<TurnTimerWidget, TurnTimerWidgetState>();
     widget_context.add_widget_system(
-        PCButtonProps::default().get_name(),
-        widget_update::<PCButtonProps, EmptyState>,
-        render_button
+        TurnTimerWidget::default().get_name(),
+        widget_update::<TurnTimerWidget, TurnTimerWidgetState>,
+        turn_timer_widget_render,
     );
+
+    
+    
     let parent_id = None;
 
     rsx! {
         <KayakAppBundle>
-            <PCButtonBundle>
-                <TextWidgetBundle
-                    text={TextProps {
-                        content: "Click me!".into(),
-                        ..Default::default()
-                    }}
-                />
-            </PCButtonBundle>
+            // Note: This is for in-game UI
+            // <ElementBundle
+            //     styles = {
+            //         KStyle {
+            //             padding: StyleProp::Value(Edge::all(Units::Pixels(10f32))),
+            //             ..default()
+            //         }
+            //     }
+            // >
+            //     <TurnTimerWidgetBundle/>
+            // </ElementBundle>
         </KayakAppBundle>
     };
+
+    commands.spawn((widget_context, EventDispatcher::default()));
+
+    // SKIP UI
+    info!("Skipping UI");
+    state.0 = ClientState::Game;
 }

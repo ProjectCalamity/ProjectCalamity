@@ -1,19 +1,21 @@
 use std::{thread, io::stdin, sync::mpsc::{Receiver, self}};
 use bevy::{prelude::*, utils::Uuid};
-use bevy_quinnet::server::Server;
 
 use crate::common::{networking::schema::Player, logic::{TileInfo, TileFeature}};
 
-use super::{ServerGameManager, networking::{ClientIDMap, SendGameboardEvent}};
+use super::{ServerGameManager, networking::{ClientIDMap, SendGameboardEvent, PlayerMoves}};
 
 /*
 
     PROJECT CALAMITY COMMAND TREE
 
     debug
+        help -> Lists all available commands
         players -> Returns players and their corresponding UUIDs
         reveal <uuid> -> Reveals the entire map for a player
-
+        turn
+            status -> Returns the status of each player's move, and the remaining time
+            execute -> Force-executes the turn immidately
 */
 
 pub struct ConsolePlugin;
@@ -23,9 +25,13 @@ impl Plugin for ConsolePlugin {
         app
             .add_event::<DebugPlayersEvent>()
             .add_event::<DebugRevealEvent>()
+            .add_event::<DebugTurnExecuteEvent>()
+            .add_event::<DebugTurnStatusEvent>()
             .insert_non_send_resource(start_console())
             .add_system(debug_players)
             .add_system(debug_reveal)
+            .add_system(debug_turn_execute)
+            .add_system(debug_turn_status)
             .add_system(parse_command_input);
     }
 }
@@ -35,6 +41,8 @@ pub struct ConsoleReciever(Receiver<String>);
 // Events - by command required to trigger
 pub struct DebugPlayersEvent;
 pub struct DebugRevealEvent(Uuid);
+pub struct DebugTurnStatusEvent;
+pub struct DebugTurnExecuteEvent;
 
 pub fn start_console() -> ConsoleReciever {
 
@@ -55,6 +63,8 @@ pub fn parse_command_input(
     // ha. ha. ha.
     mut debug_players_evw: EventWriter<DebugPlayersEvent>,
     mut debug_reveal_evw: EventWriter<DebugRevealEvent>,
+    mut debug_turn_execute_evw: EventWriter<DebugTurnExecuteEvent>,
+    mut debug_turn_status_evw: EventWriter<DebugTurnStatusEvent>,
 ) {
 
     if let Ok(input) = rx.0.try_recv() {
@@ -78,6 +88,21 @@ pub fn parse_command_input(
                                     }
                                 } else {
                                     warn!("Invalid synax: `reveal` requires a specified uuid");
+                                }
+                            }
+                            "turn" => {
+                                if sub_commands.len() >= 3 {
+                                    match sub_commands[2] {
+                                        "status" => {
+                                            debug_turn_status_evw.send(DebugTurnStatusEvent);
+                                        },
+                                        "execute" => {
+                                            debug_turn_execute_evw.send(DebugTurnExecuteEvent);
+                                        }
+                                        _ => {
+                                            warn!("Attempted to execute an invalid command: {:?} not found", sub_commands[2]);
+                                        }
+                                    }
                                 }
                             }
                             _ => {
@@ -162,5 +187,34 @@ fn debug_reveal(
                 warn!("Attempted to reveal board for non existent player {:?}", dre.0);
             }
         }
+    })
+}
+
+fn debug_turn_execute(
+    
+) {
+
+}
+
+fn debug_turn_status(
+    mut evr: EventReader<DebugTurnStatusEvent>, 
+    player_moves: Res<PlayerMoves>,
+    sgm: Res<ServerGameManager>
+) {
+    evr.iter().for_each( |_| {
+        info!("Listing turn status");
+        sgm.players.iter().for_each(|(p, t)| {
+            let associated_move_vec = player_moves
+                .map
+                .iter()
+                .filter(|(team, _)| team == &t)
+                .collect::<Vec<_>>();
+            let associated_move = associated_move_vec.get(0);
+            let mut status = "Moves not submitted";
+            if let Some(_) = associated_move {
+                status = "Moves submitted."
+            }
+            println!("  -> {:?} [{:?}]: {:?}", p.username, t.0, status);
+        })
     })
 }

@@ -19,7 +19,6 @@ impl Plugin for GraphicalPlugin {
             .add_event::<PanEvent>()
             .add_event::<TurnCompletedEvent>()
             .add_event::<ZoomEvent>()
-            .add_startup_system(spawn_camera)
             .add_system(setup_scaling.in_schedule(OnEnter(ClientState::Game)))
             .add_systems(
                 (
@@ -461,9 +460,4 @@ fn setup_scaling(mut commands: Commands, orth_q: Query<(Entity, &OrthographicPro
         unit_scl: unit_scl,
         unit_delta: 1f32,
     });
-}
-
-fn spawn_camera(mut commands: Commands) {
-    let cam = Camera2dBundle::default();
-    commands.spawn(cam).insert(GameCamera);
 }

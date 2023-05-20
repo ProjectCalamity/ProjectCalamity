@@ -1,9 +1,8 @@
 use bevy::{prelude::*, utils::Uuid};
-use kayak_ui::prelude::kayak_font::KayakFont;
 
-use crate::common::{networking::schema::Player, config::Config, logic::GameLogicPlugin};
+use crate::common::{networking::schema::Player, config::Config, logic::{GameLogicPlugin, gameboard_gen::generate_gameboard, PlayerTeam, TeamColour}};
 
-use self::{graphical::GraphicalPlugin, networking::ClientNetworkPlugin};
+use self::{graphical::GraphicalPlugin, ui::UIPlugin};
 
 pub mod graphical;
 pub mod ui;
@@ -17,25 +16,39 @@ impl Plugin for ClientPlugin {
             .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
             .add_state::<ClientState>()
             .init_resource::<Spritesheet>()
-            .init_resource::<Fonts>()
             .add_plugin(GameLogicPlugin)
             .add_plugin(GraphicalPlugin)
-            .add_plugin(ClientNetworkPlugin)
+            .add_plugin(UIPlugin)
             .add_startup_system(create_player)
             .add_startup_system(load_assets);
-        }
+    }
+}
+
+pub struct SingleplayerPlugin;
+
+impl Plugin for SingleplayerPlugin {
+    fn build(&self, app: &mut App) {
+        app
+            .add_startup_system(test_spawn_players_temp)
+            .add_system(generate_gameboard.in_set(OnUpdate(ClientState::Game)));
+    }
+}
+
+fn test_spawn_players_temp(mut commands: Commands) {
+    commands.spawn(Player { username: "Aurora".to_string(), id: Uuid::new_v4() }).insert(PlayerTeam(TeamColour::Red));
+    commands.spawn(Player { username: "AurorAlt".to_string(), id: Uuid::new_v4() }).insert(PlayerTeam(TeamColour::Blue));
 }
 
 #[derive(States, Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum ClientState {
-    MainMenu,
     #[default]
+    MainMenu,
     Game
 }
 
 fn create_player(mut commands: Commands, conf: Res<Config>) {
     commands.spawn(Player {
-        username: conf.client_config.as_ref().unwrap().username.clone(),
+        username: conf.client_config.username.clone(),
         id: Uuid::new_v4(),
     });
 }
@@ -46,12 +59,6 @@ pub struct Spritesheet {
     pub tiles: Handle<TextureAtlas>,
     pub tile_icons: Handle<TextureAtlas>,
     pub selector_icons: Handle<TextureAtlas>
-}
-
-#[derive(Resource, Default)]
-pub struct Fonts {
-    pub regular: Handle<KayakFont>,
-    pub bold: Handle<KayakFont>,
 }
 
 pub fn load_assets(mut commands: Commands, asset_server: Res<AssetServer>, mut texture_atlases: ResMut<Assets<TextureAtlas>>) {
@@ -73,11 +80,6 @@ pub fn load_assets(mut commands: Commands, asset_server: Res<AssetServer>, mut t
     let selector_icons_texture_atlas_handle = texture_atlases.add(selector_icons_texture_atlas);
 
     commands.insert_resource(Spritesheet{ characters: character_texture_atlas_handle, tiles: tile_texture_atlas_handle, tile_icons: tile_icons_texture_atlas_handle, selector_icons: selector_icons_texture_atlas_handle});
-
-    let regular = asset_server.load("fonts/atkinson_hyperlegible_regular.kayak_font");
-    let bold = asset_server.load("fonts/atkinson_hyperlegible_bold.kayak_font");
-
-    commands.insert_resource(Fonts { regular: regular, bold: bold});
 
     info!("Assets loaded");
 }

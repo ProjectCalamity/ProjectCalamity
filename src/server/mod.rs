@@ -70,7 +70,7 @@ pub fn manage_lobby(
     game_manager: Res<ServerGameManager>, 
     config: Res<Config>,
 ) {
-    let sc = config.server_config.as_ref().unwrap();
+    let sc = &config.server_config;
     if server_state.0 == ServerState::Lobby && game_manager.players.len() == sc.max_players as usize {
         server_state.0 = ServerState::Game;
         game_manager.players.iter().for_each(|(p, pt)| {
