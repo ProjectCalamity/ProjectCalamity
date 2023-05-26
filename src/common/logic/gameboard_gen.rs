@@ -24,8 +24,8 @@ pub fn generate_gameboard(
 
         let gameboard = Gameboard {
             name: "Testing Game".to_string(),
-            max_x: 64,
-            max_y: 64,
+            max_x: 1024,
+            max_y: 1024,
         };
 
         let params = GameboardGenerationParameters {
@@ -60,9 +60,9 @@ pub fn generate_gameboard(
                 let mountain_value = mountain_noise.get([x as f64 / water_scale, y as f64 / mountain_scale]);
 
                 let terrain = match water_value - mountain_value {
-                    x if x > water_range[0] && x < water_range[1] => Geography::Water,
-                    x if x > mountain_range[0] && x < mountain_range[1] => Geography::Mountains,
-                    _ => Geography::None,
+                    x if x > water_range[0] && x < water_range[1] => TileGeography::Water,
+                    x if x > mountain_range[0] && x < mountain_range[1] => TileGeography::Mountains,
+                    _ => TileGeography::Grass,
                 };
 
                 let mut visibility = Vec::<PlayerTeam>::new();

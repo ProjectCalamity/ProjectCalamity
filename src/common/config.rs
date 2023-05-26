@@ -10,7 +10,8 @@ pub struct Config {
     pub debug: bool,
     pub connection_address: String,
     pub server_config: ServerConfig,
-    pub client_config: ClientConfig
+    pub client_config: ClientConfig,
+    pub gameboard_config: GameboardConfig
 }
 
 #[derive(Debug, Default, Resource)]
@@ -21,6 +22,19 @@ pub struct ServerConfig {
 #[derive(Debug, Default, Resource)]
 pub struct ClientConfig {
     pub username: String,
+}
+
+#[derive(Debug, Resource)]
+pub struct GameboardConfig {
+    pub width: u32,
+    pub height: u32,
+    pub scale: f32
+}
+
+impl Default for GameboardConfig {
+    fn default() -> Self {
+        Self { width: 128, height: 128, scale: 1f32 }
+    }
 }
 
 impl Config {
@@ -51,6 +65,17 @@ impl Config {
 
                 // Oh that's some painful shit, yes daddy
                 config.connection_address = conn_adr.split_at(1).1.split_at(conn_adr.len() - 2).0.to_string();
+
+
+                // Gameboard config
+                let gameboard_conf_toml = &toml["gameboard"];
+                let mut gameboard_config = GameboardConfig::default();
+
+                gameboard_config.width = gameboard_conf_toml["width"].as_integer().unwrap() as u32;
+                gameboard_config.height = gameboard_conf_toml["height"].as_integer().unwrap() as u32;
+                gameboard_config.scale = gameboard_conf_toml["scale"].as_float().unwrap() as f32;
+
+                config.gameboard_config = gameboard_config;
 
                 if config.env == RunEnvironment::Server {
 

@@ -1,7 +1,7 @@
 use bevy::{prelude::*, utils::{HashMap, Uuid}};
 use bevy_quinnet::{server::{QuinnetServerPlugin, Server, ServerConfiguration, certificate::CertificateRetrievalMode}};
 
-use crate::common::{networking::schema::{ClientMessages, ServerMessages, SentPlayerInfoRequestPacket, PlayerTileInfo, Player}, config::Config, logic::{PlayerTeam, TeamColour, TileInfo, TileFeature, Gameboard, Unit, Geography, UnitAction}};
+use crate::common::{networking::schema::{ClientMessages, ServerMessages, SentPlayerInfoRequestPacket, PlayerTileInfo, Player}, config::Config, logic::{PlayerTeam, TeamColour, TileInfo, TileFeature, Gameboard, Unit, TileGeography, UnitAction}};
 
 use super::{ServerState, ServerGameManager};
 
@@ -176,7 +176,6 @@ pub fn send_gameboard(
 
             let pos_vec = tiles_vec
                 .iter()
-                .filter(|t| t.geography != Geography::Fog)
                 .map(|u| u.pos)
                 .collect::<Vec<[i32; 2]>>();
 

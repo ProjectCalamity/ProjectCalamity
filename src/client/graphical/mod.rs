@@ -1,13 +1,13 @@
 pub mod inputs;
 
 use bevy::prelude::*;
-use rand::Rng;
+use bevy_fast_tilemap::{Map, MapBundle, MeshManagedByMap};
 
-use crate::common::logic::{*, units::UnitID};
+use crate::common::{logic::*, config::Config};
 
 use self::inputs::{ZoomEvent, scroll_events, zoom_camera, PanEvent, mouse_pan_events, scroll_camera, mouse_click_events, GridPosClickEvent, select_unit, TurnCompletedEvent, keyboard_input};
 
-use super::{ClientState, Spritesheet};
+use super::{ClientState};
 
 pub struct GraphicalPlugin;
 
@@ -19,17 +19,8 @@ impl Plugin for GraphicalPlugin {
             .add_event::<PanEvent>()
             .add_event::<TurnCompletedEvent>()
             .add_event::<ZoomEvent>()
+            .add_startup_system(spawn_gameboard)
             .add_system(setup_scaling.in_schedule(OnEnter(ClientState::Game)))
-            .add_systems(
-                (
-                    render_terrain, 
-                    render_features, 
-                    render_units, 
-                    render_unit_action_ghosts,
-                    render_icons
-                )
-                .in_set(OnUpdate(ClientState::Game))
-            )
             .add_systems(
                 (
                     conform_transforms_tiles, 
@@ -87,247 +78,22 @@ struct RenderedUnitAction;
 #[derive(Component)]
 pub struct RenderedIcon;
 
-/*
-    Rendering is performed in five "passes":
-    
-    1. Terrain z = 0
-    2. Features z = 10
-    3. Units z = 20
-    4. Icons z = 30
-    5. UI z = 50
-
-    Each has a seperate system.
-*/
-
-// Step 1: Terrain
-fn render_terrain(
+fn spawn_gameboard(
     mut commands: Commands,
-    mut rendered_tiles: Query<(&TileInfo, &mut TextureAtlasSprite, With<RenderedTerrain>)>,
-    nonrendered_tiles: Query<(Entity, &TileInfo, Without<Handle<TextureAtlas>>)>,
-    spritesheet: Res<Spritesheet>
+    asset_server: Res<AssetServer>,
+    config: Res<Config>,
+    mut images: ResMut<Assets<Image>>
 ) {
-    nonrendered_tiles.iter().for_each(|(e, t, ())| {
+    info!("SIZE {:?} {:?}", config.gameboard_config.width, config.gameboard_config.height);
+    let map = Map::builder(
+        UVec2 { x: config.gameboard_config.width, y: config.gameboard_config.height },
+        asset_server.load("sprites/tilemap_atlas_new.png"),
+        Vec2 { x: 16f32, y: 16f32 }
+    ).build(&mut images);
 
-        let mut bundle = SpriteSheetBundle {
-            sprite: TextureAtlasSprite::new(texture_index_from_geography(&t.geography)),
-            texture_atlas: spritesheet.tiles.clone(),
-            ..default()
-        };
-
-        bundle.transform.scale.x *= 0.7;
-        bundle.transform.scale.y *= 0.7;
-        bundle.transform.translation.z = 0f32;
-
-        commands.entity(e).insert(bundle).insert(GameScalable).insert(RenderedTerrain);
-    });
-
-    rendered_tiles.iter_mut().for_each(|(t, mut a, ())| {
-        if t.geography != geography_from_texture_index(a.index) {
-            a.index = texture_index_from_geography(&t.geography);
-        }
-    });
-}
-
-fn geography_from_texture_index(index: usize) -> Geography {
-    return match index {
-        0..=3 => Geography::None,
-        8..=11 => Geography::Water,
-        4..=7 => Geography::Mountains,
-        12..=15 => Geography::Fog,
-        _ => Geography::None
-    }
-}
-
-fn texture_index_from_geography(geo: &Geography) -> usize {
-    let mut rng = rand::thread_rng();
-    return match geo {
-        Geography::None => rng.gen_range(0..3),
-        Geography::Water => rng.gen_range(8..11),
-        Geography::Mountains => rng.gen_range(4..7),
-        Geography::Fog => rng.gen_range(12..15)
-    };
-}
-
-// Step 2: Features
-fn render_features(
-    mut commands: Commands,
-    mut rendered_features: Query<(&TileFeature, &mut TextureAtlasSprite, With<RenderedFeature>)>,
-    nonrendered_features: Query<(Entity, &TileFeature, Without<Handle<TextureAtlas>>)>,
-    spritesheet: Res<Spritesheet>
-) {
-    nonrendered_features.iter().for_each(|(e, tf, ())| {
-        let mut bundle = SpriteSheetBundle {
-            sprite: TextureAtlasSprite::new(texture_index_from_tile_feature(&tf.feature)),
-            texture_atlas: spritesheet.tile_icons.clone(),
-            ..default()
-        };
-
-        bundle.transform.scale.x *= 0.7;
-        bundle.transform.scale.y *= 0.7;
-        bundle.transform.translation.z = 10f32;
-
-        commands.entity(e).insert(bundle).insert(GameScalable).insert(RenderedTerrain);
-    });
-
-    rendered_features.iter_mut().for_each(|(tf, mut a, ())| {
-        if tf.feature != tile_feature_from_texture_index(a.index) {
-            a.index = texture_index_from_tile_feature(&tf.feature);
-        }
-    });
-}
-
-fn tile_feature_from_texture_index(index: usize) -> TileFeatures {
-    return match index {
-        0 => TileFeatures::CurrencySite(Archetype(Archetypes::Magic)),
-        1 => TileFeatures::CurrencySite(Archetype(Archetypes::Science)),
-        3 => TileFeatures::Nest(PlayerTeam(TeamColour::Red)),
-        _ => TileFeatures::Nest(PlayerTeam(TeamColour::Blue))
-    }
-}
-
-fn texture_index_from_tile_feature(tf: &TileFeatures) -> usize {
-    return match tf {
-        TileFeatures::CurrencySite(Archetype(Archetypes::Magic)) => 0,
-        TileFeatures::CurrencySite(Archetype(Archetypes::Science)) => 1,
-        TileFeatures::Nest(PlayerTeam(TeamColour::Red)) => 2,
-        _ => 3,
-    };
-}
-
-// Step 3: Units
-fn render_units(
-    mut commands: Commands,
-    mut rendered_units: Query<(&Unit, &mut TextureAtlasSprite, With<RenderedUnit>)>,
-    nonrendered_units: Query<(Entity, &Unit, Without<Handle<TextureAtlas>>)>,
-    spritesheet: Res<Spritesheet>
-) {
-    nonrendered_units.iter().for_each(|(e, u, ())| {
-        let mut bundle = SpriteSheetBundle {
-            sprite: TextureAtlasSprite::new(texture_index_from_unit_id(&u.id)),
-            texture_atlas: spritesheet.characters.clone(),
-            ..default()
-        };
-
-        bundle.transform.scale.x *= 0.7;
-        bundle.transform.scale.y *= 0.7;
-        bundle.transform.translation.z = 20f32;
-
-        commands.entity(e).insert(bundle).insert(GameScalable).insert(RenderedTerrain);
-    });
-
-    rendered_units.iter_mut().for_each(|(u, mut a, ())| {
-        if u.id != unit_id_from_texture_index(a.index) {
-            a.index = texture_index_from_unit_id(&u.id);
-        }
-    });
-}
-
-fn unit_id_from_texture_index(index: usize) -> UnitID {
-    return match index {
-        0 => UnitID::ScienceGenericTest,
-        1 => UnitID::MagicGenericTest,
-        _ => UnitID::ScienceGenericTest,
-    }
-}
-
-fn texture_index_from_unit_id(uid: &UnitID) -> usize {
-    return match uid {
-        UnitID::ScienceGenericTest => 0,
-        UnitID::MagicGenericTest => 1,
-    };
-}
-
-// Step 3.5: Unit action ghosts
-fn render_unit_action_ghosts(
-    mut commands: Commands,
-    mut rendered_units: Query<(&UnitAction, &mut TextureAtlasSprite, With<RenderedUnitAction>)>,
-    units: Query<&Unit>,
-    nonrendered_units: Query<(Entity, &UnitAction, Without<Handle<TextureAtlas>>)>,
-    spritesheet: Res<Spritesheet>
-) {
-    nonrendered_units.iter().for_each(|(e, u, ())| {
-
-        let unit_at_pos = units
-            .iter()
-            .filter(|un| u.curr_pos == un.pos)
-            .collect::<Vec<_>>()
-            [0];
-
-        let mut bundle = SpriteSheetBundle {
-            sprite: TextureAtlasSprite::new(texture_index_from_unit_id(&unit_at_pos.id)),
-            texture_atlas: spritesheet.characters.clone(),
-            ..default()
-        };
-
-        bundle.transform.scale.x *= 0.7;
-        bundle.transform.scale.y *= 0.7;
-        bundle.transform.translation.z = 50f32;
-
-        commands.entity(e).insert(bundle).insert(GameScalable).insert(RenderedUnitAction);
-    });
-
-    rendered_units.iter_mut().for_each(|(u, mut a, ())| {
-
-        let unit_at_pos = units
-            .iter()
-            .filter(|un| u.curr_pos == un.pos)
-            .collect::<Vec<_>>()
-            [0];
-
-        // Make sure the colour is right!
-        if a.color != (Color::Rgba { red: 1f32, green: 1f32, blue: 1f32, alpha: 0.7f32 }) {
-            a.color = Color::Rgba { red: 1f32, green: 1f32, blue: 1f32, alpha: 0.7f32 };
-        }
-
-        if unit_at_pos.id != unit_id_from_texture_index(a.index) {
-            a.index = texture_index_from_unit_id(&unit_at_pos.id);
-        }
-    });
-}
-
-// Step 4: Icons
-fn render_icons(
-    mut commands: Commands,
-    mut rendered_icons: Query<(&Icon, &mut TextureAtlasSprite, With<RenderedIcon>)>,
-    nonrendered_icons: Query<(Entity, &Icon, Without<Handle<TextureAtlas>>)>,
-    spritesheet: Res<Spritesheet>
-) {
-    nonrendered_icons.iter().for_each(|(e, i, ())| {
-        let mut bundle = SpriteSheetBundle {
-            sprite: TextureAtlasSprite::new(texture_index_from_icon(&i.icon)),
-            texture_atlas: spritesheet.selector_icons.clone(),
-            ..default()
-        };
-
-        bundle.transform.scale.x *= 0.7;
-        bundle.transform.scale.y *= 0.7;
-        bundle.transform.translation.z = 30f32;
-
-        commands.entity(e).insert(bundle).insert(GameScalable).insert(RenderedIcon);
-    });
-
-    rendered_icons.iter_mut().for_each(|(i, mut a, ())| {
-        if i.icon != icon_from_texture_index(a.index) {
-            a.index = texture_index_from_icon(&i.icon);
-        }
-    });
-}
-
-fn icon_from_texture_index(index: usize) -> Icons {
-    return match index {
-        0 => Icons::Selector,
-        1 => Icons::Circle,
-        2 => Icons::Cross,
-        _ => Icons::Selector
-    }
-}
-
-fn texture_index_from_icon(i: &Icons) -> usize {
-    return match i {
-        Icons::Selector => 0,
-        Icons::Circle => 1,
-        Icons::Cross => 2,
-    };
+    commands.spawn(MapBundle::new(map))
+        .insert(MeshManagedByMap)
+        .insert(Name::new("Gameboard"));
 }
 
 fn update_transforms(mut cam: Query<(&OrthographicProjection, &mut GameCameraScalingInfo)>, board_info: Query<&Gameboard>) {

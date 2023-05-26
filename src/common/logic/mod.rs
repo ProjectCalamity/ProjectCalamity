@@ -1,8 +1,10 @@
 pub mod units;
 pub mod gameboard_gen;
+pub mod neo_gameboard;
 
 use bevy::{prelude::*};
 use bevy_quinnet::server::Server;
+use rand::{rngs::ThreadRng, Rng};
 use serde::{Serialize, Deserialize};
 
 use crate::server::{networking::ClientIDMap, ServerGameManager};
@@ -71,7 +73,7 @@ pub struct Gameboard {
 #[derive(Component, Debug, Reflect, FromReflect)]
 pub struct TileInfo {
     pub pos: [i32; 2],
-    pub geography: Geography,
+    pub geography: TileGeography,
     pub visible_to_players: Vec<PlayerTeam>,
 }
 
@@ -83,10 +85,6 @@ impl TileInfo {
     }
 
     pub fn player_tile_info(&self, player: PlayerTeam, feature: Option<&&TileFeature>) -> PlayerTileInfo {
-        let mut geography = Geography::Fog;
-        if self.visible_to_players.contains(&player) {
-            geography = self.geography;
-        }
 
         let mut visible_features = None;
 
@@ -103,23 +101,43 @@ impl TileInfo {
         }
 
         return PlayerTileInfo { 
-            geography: geography, 
+            geography: self.geography, 
             pos: self.pos, 
             visible_features: visible_features
         };
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
-pub enum Geography {
-    None,
-    Water,
+#[derive(Clone, Copy, Debug, Default, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
+pub enum TileGeography {
+    Desert,
+    Forest,
+    #[default]
+    Grass,
+    Jungle,
     Mountains,
-    Fog
+    Savanna,
+    ShallowWater,
+    Water,
+}
+
+impl TileGeography {
+    fn to_atlas_index(&self, rand: &mut ThreadRng) -> u16 {
+        match self {
+            TileGeography::Desert => return rand.gen_range(16..20),
+            TileGeography::Forest => return rand.gen_range(24..28),
+            TileGeography::Grass => return rand.gen_range(0..4),
+            TileGeography::Jungle => return rand.gen_range(12..16),
+            TileGeography::Mountains => return rand.gen_range(20..24),
+            TileGeography::Savanna => return rand.gen_range(28..32),
+            TileGeography::ShallowWater => return rand.gen_range(8..12),
+            TileGeography::Water => return rand.gen_range(4..8),
+        };
+    }
 }
 
 #[derive(Bundle, Reflect)]
-struct UnitActionBundle{
+struct UnitActionBundle {
     unit_action: UnitAction,
 }
 

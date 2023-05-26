@@ -1,6 +1,7 @@
 use bevy::{prelude::*, utils::Uuid};
+use bevy_fast_tilemap::FastTileMapPlugin;
 
-use crate::common::{networking::schema::Player, config::Config, logic::{GameLogicPlugin, gameboard_gen::generate_gameboard, PlayerTeam, TeamColour}};
+use crate::common::{networking::schema::Player, config::Config, logic::{GameLogicPlugin, gameboard_gen::generate_gameboard, PlayerTeam, TeamColour, neo_gameboard::{self, spawn_gameboard}}};
 
 use self::{graphical::GraphicalPlugin, ui::UIPlugin};
 
@@ -16,6 +17,7 @@ impl Plugin for ClientPlugin {
             .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
             .add_state::<ClientState>()
             .init_resource::<Spritesheet>()
+            .add_plugin(FastTileMapPlugin::default())
             .add_plugin(GameLogicPlugin)
             .add_plugin(GraphicalPlugin)
             .add_plugin(UIPlugin)
@@ -30,7 +32,7 @@ impl Plugin for SingleplayerPlugin {
     fn build(&self, app: &mut App) {
         app
             .add_startup_system(test_spawn_players_temp)
-            .add_system(generate_gameboard.in_set(OnUpdate(ClientState::Game)));
+            .add_system(spawn_gameboard.in_set(OnUpdate(ClientState::Game)));
     }
 }
 
