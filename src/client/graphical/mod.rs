@@ -1,11 +1,13 @@
 pub mod inputs;
 
-use bevy::{math::Vec3Swizzles, prelude::*};
+use std::ops::Add;
+
+use bevy::{math::Vec3Swizzles, prelude::*, sprite::MaterialMesh2dBundle};
 use bevy_fast_tilemap::{Map, MapBundle, MeshManagedByMap};
 
 use crate::common::{
     config::Config,
-    logic::{units::UnitID, *},
+    logic::{neo_gameboard::Gameboard, units::UnitID, *},
 };
 
 use self::inputs::{
@@ -25,8 +27,9 @@ impl Plugin for GraphicalPlugin {
             .add_event::<TurnCompletedEvent>()
             .add_event::<ZoomEvent>()
             .add_startup_system(spawn_gameboard)
-            .add_system(setup_scaling.in_schedule(OnEnter(ClientState::Game)))
+            .add_system(test_spawn_unit.in_schedule(OnEnter(ClientState::Game)))
             .add_system(render.in_set(OnUpdate(ClientState::Game)))
+            .add_system(show_movable_tiles.in_set(OnUpdate(ClientState::Game)))
             .add_system(scroll_events.in_set(OnUpdate(ClientState::Game)))
             .add_system(select_unit.in_set(OnUpdate(ClientState::Game)))
             .add_system(zoom_camera.in_set(OnUpdate(ClientState::Game)))
@@ -34,6 +37,45 @@ impl Plugin for GraphicalPlugin {
             .add_system(mouse_pan_events.in_set(OnUpdate(ClientState::Game)))
             .add_system(scroll_camera.in_set(OnUpdate(ClientState::Game)))
             .add_system(keyboard_input.in_set(OnUpdate(ClientState::Game)));
+    }
+}
+
+#[derive(Component)]
+pub struct IconTagTemp;
+
+fn show_movable_tiles(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    units: Query<&Unit>,
+    prev_icons: Query<Entity, With<IconTagTemp>>,
+    gameboard: Query<&Gameboard>,
+    map: Query<&Map>,
+) {
+    for gameboard in gameboard.iter() {
+        let map = map.single();
+
+        prev_icons.iter().for_each(|e| commands.entity(e).despawn());
+
+        for unit in units.iter() {
+            for tile in unit.calculate_traversible_tiles(gameboard, unit.movement.0 as f32) {
+                let world_pos = map.map_to_world(tile).add(Vec2::new(-8f32, 8f32));
+                commands
+                    .spawn(MaterialMesh2dBundle {
+                        mesh: meshes
+                            .add(shape::Quad::new(Vec2::splat(8f32)).into())
+                            .into(),
+                        material: materials.add(ColorMaterial::from(Color::LIME_GREEN)),
+                        transform: Transform::from_translation(Vec3::new(
+                            world_pos.x,
+                            world_pos.y,
+                            100f32,
+                        )),
+                        ..default()
+                    })
+                    .insert(IconTagTemp);
+            }
+        }
     }
 }
 
@@ -104,10 +146,9 @@ fn render(
 ) {
     let map = map_q.single();
     for (entity, unit, _) in &unrendered_units {
-        // Since this gets us the middle of tiles, and we want the bottom left,
-        // we take the diagonally down left tile, and average the positions
+        // The unit needs to be transformed so it's center aligns with the center of the tile
 
-        let pos = map.map_to_world(unit.pos);
+        let pos = map.map_to_world(unit.pos).add(Vec2::splat(8f32));
         let bundle = SpriteSheetBundle {
             sprite: TextureAtlasSprite::new(texture_index_from_unit_id(&unit.id)),
             texture_atlas: spritesheet.characters.clone(), // To optimising Aurora, it's a handle!
@@ -117,7 +158,7 @@ fn render(
                     y: pos.y,
                     z: 10f32,
                 },
-                scale: Vec3::splat(0.7),
+                scale: Vec3::splat(0.5),
                 ..default()
             },
             ..default()
@@ -127,7 +168,7 @@ fn render(
 
     for (unit, mut transform, _) in &mut rendered_units {
         // Align to grid
-        let pos = map.map_to_world(unit.pos);
+        let pos = map.map_to_world(unit.pos).add(Vec2::new(8f32, -8f32));
         if transform.translation.xy() != pos {
             transform.translation = Vec3::new(pos.x, pos.y, 10f32);
         }
@@ -149,15 +190,7 @@ struct GameScalable;
 #[derive(Component, Reflect)]
 pub struct GameCamera;
 
-fn setup_scaling(
-    mut commands: Commands,
-    orth_q: Query<(Entity, &OrthographicProjection, With<GameCamera>)>,
-) {
-    let orth = orth_q.single().1;
-    let x_scl = orth.area.max.x - orth.area.min.x;
-    let y_scl = orth.area.max.y - orth.area.min.y;
-    let unit_scl = f32::min(x_scl, y_scl);
-
+fn test_spawn_unit(mut commands: Commands) {
     // TEMPORARILY spawn unit
     // TODO: Remove this
 
@@ -174,13 +207,4 @@ fn setup_scaling(
             owner: PlayerTeam(TeamColour::Red),
         })
         .insert(Name::new("Unit"));
-
-    commands
-        .entity(orth_q.single().0)
-        .insert(GameCameraScalingInfo {
-            x_scl: x_scl,
-            y_scl: y_scl,
-            unit_scl: unit_scl,
-            unit_delta: 1f32,
-        });
 }

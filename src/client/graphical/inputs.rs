@@ -1,15 +1,12 @@
-use bevy::{
-    input::mouse::{MouseMotion, MouseWheel},
-    prelude::*,
-};
+use std::ops::Add;
+
+use bevy::input::mouse::{MouseMotion, MouseWheel};
+use bevy::prelude::*;
 use bevy_fast_tilemap::Map;
 
-use crate::{
-    client::graphical::{GameScalable, Icon, Icons},
-    common::logic::{TraversableTiles, Unit, UnitAction, UnitActions},
-};
+use crate::common::logic::neo_gameboard::Gameboard;
 
-use super::{GameCamera, RenderedIcon};
+use super::GameCamera;
 
 pub struct TurnCompletedEvent;
 
@@ -84,14 +81,18 @@ pub fn mouse_pan_events(
 pub fn mouse_click_events(
     buttons: Res<Input<MouseButton>>,
     windows: Query<&Window>,
+    camera_q: Query<(&Camera, &GlobalTransform), With<GameCamera>>,
     mut grid_pos_click_evw: EventWriter<GridPosClickEvent>,
-    map_q: Query<&Map>,
 ) {
     if buttons.just_released(MouseButton::Left) {
-        let map = map_q.single();
         let window = windows.single();
+        let (camera, camera_transform) = camera_q.single();
 
-        let pos = map.world_to_map(window.cursor_position().unwrap());
+        let pos = window
+            .cursor_position()
+            .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+            .map(|ray| ray.origin.truncate())
+            .unwrap();
         grid_pos_click_evw.send(GridPosClickEvent { pos })
     }
 }
@@ -99,99 +100,15 @@ pub fn mouse_click_events(
 pub fn select_unit(
     mut commands: Commands,
     mut click_evr: EventReader<GridPosClickEvent>,
-    units: Query<(&mut Unit, &TraversableTiles)>,
-    selected: Query<(Entity, &SelectedUnit)>,
-    icons: Query<(Entity, &RenderedIcon)>,
-    actions: Query<(Entity, &UnitAction)>,
+    map: Query<&Map>,
+    gameboard: Query<&Gameboard>,
 ) {
     for click_event in click_evr.iter() {
-        info!("CLICK EVENT {:?}", click_event);
-        // Get rid of all pre-existing icons
-        icons
-            .iter()
-            .for_each(|(e, _)| commands.entity(e).despawn_recursive());
-
-        // Wherever we click, we definitely want to despawn all icons
-        icons
-            .iter()
-            .for_each(|(e, _)| commands.entity(e).despawn_recursive());
-
-        // We already have a unit selected; now we're selecting it's position
-        if selected.iter().len() == 1 {
-            let selection_pos = selected.single().1 .0;
-            // Ensure that the move is
-            //    a) Valid
-            //    b) Possible
-            let unit_vec = units
-                .iter()
-                .filter(|(u, t)| u.pos == selection_pos && t.0.contains(&click_event.pos))
-                .collect::<Vec<_>>();
-            if unit_vec.len() == 1 {
-                let (unit, _) = unit_vec[0];
-
-                // Despawn all previous UnitActions pertaining to this unit
-                actions
-                    .iter()
-                    .filter(|(_, a)| a.curr_pos == selection_pos)
-                    .for_each(|(e, _)| commands.entity(e).despawn_recursive());
-
-                // Spawn a new UnitAction
-                // TODO: Deal with other action type contingencies
-                commands.spawn(UnitAction {
-                    action_type: UnitActions::Move,
-                    turn_stage: unit.turn_execute_stage.clone(),
-                    curr_pos: unit.pos,
-                    action_pos: click_event.pos,
-                });
-
-                // Deselect unit, and despawn icons
-                selected
-                    .iter()
-                    .for_each(|(e, _)| commands.entity(e).despawn_recursive());
-            }
-        }
-
-        // No unit is selected, and thus we should attempt to select the unit at the click event
-        if selected.iter().len() == 0 {
-            let unit_vec = units
-                .iter()
-                .filter(|(u, _)| u.pos == click_event.pos)
-                .collect::<Vec<_>>();
-
-            // Select a unit if it's there
-            if unit_vec.len() == 1 {
-                // Select
-                commands
-                    .spawn(SelectedUnit(click_event.pos))
-                    .insert(Name::new("Selected Unit"));
-
-                // Spawn icons
-                commands
-                    .spawn(Icon {
-                        icon: Icons::Selector,
-                        pos: click_event.pos,
-                    })
-                    .insert(GameScalable)
-                    .insert(Name::new("Selector"));
-
-                unit_vec[0].1 .0.iter().for_each(|pos| {
-                    commands
-                        .spawn(Icon {
-                            icon: Icons::Circle,
-                            pos: pos.clone(),
-                        })
-                        .insert(GameScalable)
-                        .insert(Name::new("Movable Tile"));
-                });
-            }
-        }
-
-        if selected.iter().len() > 1 {
-            info!("More than one unit is selected, this shouldn't be possible. Deselecting all units.");
-            selected
-                .iter()
-                .for_each(|(e, _)| commands.entity(e).despawn_recursive());
-        }
+        let map = map.single();
+        // This is a bit messy, because the tilemap consider's the tile's "position" as it's top left corner
+        let click_pos = click_event.pos.add(Vec2::new(8f32, -8f32));
+        let map_pos = map.world_to_map(click_pos).round();
+        let world_pos = map.map_to_world(map_pos).add(Vec2::new(-8f32, 8f32));
     }
 }
 

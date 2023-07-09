@@ -7,8 +7,8 @@ debug = "true"
 connection_address = "127.0.0.1:2360"
 
 [gameboard]
-width = 100
-height = 100
+width = 25
+height = 25
 scale = 1.0
 
 [server]

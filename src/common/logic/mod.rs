@@ -1,4 +1,3 @@
-pub mod gameboard_gen;
 pub mod neo_gameboard;
 pub mod units;
 
@@ -6,7 +5,10 @@ use bevy::prelude::*;
 use rand::{rngs::ThreadRng, Rng};
 use serde::{Deserialize, Serialize};
 
-use self::units::UnitID;
+use self::{
+    neo_gameboard::{Gameboard, Tile},
+    units::UnitID,
+};
 pub struct GameLogicPlugin;
 
 impl Plugin for GameLogicPlugin {
@@ -14,43 +16,14 @@ impl Plugin for GameLogicPlugin {
         app.register_type::<Archetype>()
             .register_type::<Attack>()
             .register_type::<Defense>()
-            .register_type::<Gameboard>()
             .register_type::<Health>()
             .register_type::<Movement>()
             .register_type::<PlayerTeam>()
             .register_type::<TileFeature>()
             .register_type::<TileFeatures>()
-            .register_type::<Tile>()
             .register_type::<TurnExecuteStage>()
             .register_type::<Unit>()
             .register_type::<UnitAction>();
-    }
-}
-
-#[derive(Component, FromReflect, Reflect)]
-pub struct TraversableTiles(pub Vec<Vec2>);
-
-#[derive(Component, FromReflect, Reflect)]
-pub struct ViewableTiles(pub Vec<[i32; 2]>);
-
-#[derive(Clone, Component, Debug, Deserialize, Reflect, Serialize)]
-pub struct Gameboard {
-    pub name: String,
-    pub max_x: u32,
-    pub max_y: u32,
-}
-
-#[derive(Component, Debug, Reflect, FromReflect)]
-pub struct Tile {
-    pub pos: Vec2,
-    pub geography: Terrain,
-    pub visible_to_players: Vec<PlayerTeam>,
-}
-
-impl Tile {
-    pub fn reveal(&mut self, player: PlayerTeam, feature: Option<TileFeature>) {
-        // Register to self as revealed
-        self.visible_to_players.push(player);
     }
 }
 
@@ -121,11 +94,38 @@ pub struct Unit {
     pub owner: PlayerTeam,
 }
 
-// impl Unit {
-//     fn pos_to_slice(&self) -> [i32; 2] {
-//         return
-//     }
-// }
+impl Unit {
+    pub fn calculate_traversible_tiles(&self, gameboard: &Gameboard, movement: f32) -> Vec<Vec2> {
+        let mut tile_movement_costs =
+            vec![vec![None::<f32>; gameboard.y() as usize]; gameboard.x() as usize];
+
+        let (x, y) = (self.pos.x as usize, self.pos.y as usize);
+        tile_movement_costs[x][y] = Some(0f32);
+
+        // Recursion me harder
+        gameboard.tile(x, y).unwrap().propogate_movement_costs(
+            vec![gameboard.tile(x, y).unwrap()],
+            &mut tile_movement_costs,
+            gameboard,
+        );
+
+        let mut movable_tiles = Vec::<Vec2>::new();
+        for x in 0..tile_movement_costs.len() {
+            for y in 0..tile_movement_costs[0].len() {
+                print!(" | {:?}", tile_movement_costs[x][y].unwrap());
+                if tile_movement_costs[x][y].unwrap() <= movement {
+                    movable_tiles.push(gameboard.tile(x, y).unwrap().pos());
+                }
+            }
+            println!("");
+        }
+        println!("\n\n\n NEW TABLE \n\n\n");
+
+        // Let's quickly print our thingy
+
+        return movable_tiles;
+    }
+}
 
 #[derive(Clone, Component, Debug, Default, Deserialize, FromReflect, Reflect, Serialize)]
 pub struct Health(pub f32);
