@@ -1,67 +1,37 @@
-pub mod units;
 pub mod gameboard_gen;
 pub mod neo_gameboard;
+pub mod units;
 
-use bevy::{prelude::*};
-use bevy_quinnet::server::Server;
+use bevy::prelude::*;
 use rand::{rngs::ThreadRng, Rng};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-use crate::server::{networking::ClientIDMap, ServerGameManager};
-
-use self::{units::UnitID, gameboard_gen::GameboardGenerationParameters};
-
-use super::networking::schema::{PlayerTileInfo, ServerMessages};
+use self::units::UnitID;
 pub struct GameLogicPlugin;
 
 impl Plugin for GameLogicPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .register_type::<Archetype>()
+        app.register_type::<Archetype>()
             .register_type::<Attack>()
             .register_type::<Defense>()
             .register_type::<Gameboard>()
-            .register_type::<GameboardGenerationParameters>()
             .register_type::<Health>()
             .register_type::<Movement>()
             .register_type::<PlayerTeam>()
             .register_type::<TileFeature>()
             .register_type::<TileFeatures>()
-            .register_type::<TileInfo>()
+            .register_type::<Tile>()
             .register_type::<TurnExecuteStage>()
             .register_type::<Unit>()
-            .register_type::<UnitAction>()
-            .add_system(calculate_traversable_tiles);
+            .register_type::<UnitAction>();
     }
 }
 
-fn calculate_traversable_tiles(
-    mut commands: Commands,
-    unit_q: Query<(Entity, &Unit)>,
-    tiles_q: Query<&TileInfo>
-) {
-    unit_q.iter().for_each(|(e, u)| {
-
-        let mut reachable_tiles = Vec::<[i32; 2]>::new();
-
-        tiles_q.iter().for_each(|t| {
-            // TODO: Improve searching algorithm
-            if ((u.pos[0] - t.pos[0]).abs() + (u.pos[1] - t.pos[1]).abs() <= u.movement.0) 
-                && u.pos != t.pos
-            {
-                reachable_tiles.push(t.pos.clone());
-            }
-        });
-        commands.entity(e).insert(TraversableTiles(reachable_tiles));
-    })
-}
-
 #[derive(Component, FromReflect, Reflect)]
-pub struct TraversableTiles(pub Vec<[i32; 2]>);
+pub struct TraversableTiles(pub Vec<Vec2>);
 
 #[derive(Component, FromReflect, Reflect)]
 pub struct ViewableTiles(pub Vec<[i32; 2]>);
-
 
 #[derive(Clone, Component, Debug, Deserialize, Reflect, Serialize)]
 pub struct Gameboard {
@@ -71,45 +41,21 @@ pub struct Gameboard {
 }
 
 #[derive(Component, Debug, Reflect, FromReflect)]
-pub struct TileInfo {
-    pub pos: [i32; 2],
-    pub geography: TileGeography,
+pub struct Tile {
+    pub pos: Vec2,
+    pub geography: Terrain,
     pub visible_to_players: Vec<PlayerTeam>,
 }
 
-impl TileInfo {
-
+impl Tile {
     pub fn reveal(&mut self, player: PlayerTeam, feature: Option<TileFeature>) {
         // Register to self as revealed
         self.visible_to_players.push(player);
     }
-
-    pub fn player_tile_info(&self, player: PlayerTeam, feature: Option<&&TileFeature>) -> PlayerTileInfo {
-
-        let mut visible_features = None;
-
-        if let Some(feature_ref) = feature {
-            if self.visible_to_players.contains(&player) {
-                let feature = feature_ref.clone().clone();
-                if feature.feature != TileFeatures::CurrencySite(Archetype(Archetypes::Science)) 
-                    && feature.feature != TileFeatures::CurrencySite(Archetype(Archetypes::Magic)) {
-                    visible_features = Some(feature.clone());
-                } else if feature.visible_to_players.contains(&player) {
-                    visible_features = Some(feature.clone());
-                }
-            }
-        }
-
-        return PlayerTileInfo { 
-            geography: self.geography, 
-            pos: self.pos, 
-            visible_features: visible_features
-        };
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
-pub enum TileGeography {
+pub enum Terrain {
     Desert,
     Forest,
     #[default]
@@ -121,17 +67,17 @@ pub enum TileGeography {
     Water,
 }
 
-impl TileGeography {
+impl Terrain {
     fn to_atlas_index(&self, rand: &mut ThreadRng) -> u16 {
         match self {
-            TileGeography::Desert => return rand.gen_range(16..20),
-            TileGeography::Forest => return rand.gen_range(24..28),
-            TileGeography::Grass => return rand.gen_range(0..4),
-            TileGeography::Jungle => return rand.gen_range(12..16),
-            TileGeography::Mountains => return rand.gen_range(20..24),
-            TileGeography::Savanna => return rand.gen_range(28..32),
-            TileGeography::ShallowWater => return rand.gen_range(8..12),
-            TileGeography::Water => return rand.gen_range(4..8),
+            Terrain::Desert => return rand.gen_range(16..20),
+            Terrain::Forest => return rand.gen_range(24..28),
+            Terrain::Grass => return rand.gen_range(0..4),
+            Terrain::Jungle => return rand.gen_range(12..16),
+            Terrain::Mountains => return rand.gen_range(20..24),
+            Terrain::Savanna => return rand.gen_range(28..32),
+            Terrain::ShallowWater => return rand.gen_range(8..12),
+            Terrain::Water => return rand.gen_range(4..8),
         };
     }
 }
@@ -145,144 +91,8 @@ struct UnitActionBundle {
 pub struct UnitAction {
     pub action_type: UnitActions,
     pub turn_stage: TurnExecuteStage,
-    pub curr_pos: [i32; 2],
-    pub action_pos: [i32; 2]
-}
-
-impl UnitAction {
-    pub fn apply(
-        &self, 
-        server: &Server,
-        units_q: &mut Vec<Mut<Unit>>,
-        tiles: &mut Vec<Mut<TileInfo>>,
-        tile_features: &mut Vec<Mut<TileFeature>>,
-        game_manager: &ServerGameManager,
-        clients: &ClientIDMap,
-    ) {
-        if self.action_type == UnitActions::Move {
-            // Move
-            // Server
-            let mut units = units_q
-                .iter_mut()
-                .filter(|u| u.pos == self.curr_pos)
-                .collect::<Vec<_>>();
-
-            let unit = units.get_mut(0).unwrap();
-
-            unit.pos = self.action_pos;
-
-            // Reveal tiles
-            // Calculate viewable tiles
-            let tiles_to_reveal = tiles
-                .iter_mut()
-                .filter(|tile| 
-                    (unit.pos[0] - tile.pos[0]).abs()
-                    + (unit.pos[1] - tile.pos[1]).abs()
-                    <= unit.movement.0
-                    && !tile.visible_to_players.contains(&unit.owner)
-                )
-                .map(|t| {
-                    t.visible_to_players.push(unit.owner.clone());
-                    return t;
-                })
-                .collect::<Vec<_>>();
-
-            let client_id = game_manager.client_id(&unit.owner, &clients.map);
-            
-            // Register tiles as visible to client on server
-
-            tiles_to_reveal.iter().for_each(|tile| {
-
-                let mut feature = None;
-
-                let relevant_feature_filtered = tile_features
-                    .iter()
-                    .filter_map(|tf| {
-                        if tf.pos == tile.pos {
-                            if let TileFeatures::Nest(_) = tf.feature {
-                                return Some(tf);
-                            } else {
-                                return None;
-                            }
-                        } else {
-                            return None;
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                if relevant_feature_filtered.len() == 1 {
-                    let feature_uncloned = relevant_feature_filtered[0];
-                    // God is dead, and I have killed them
-                    feature = Some(TileFeature {
-                        pos: feature_uncloned.pos,
-                        feature: feature_uncloned.feature.clone(),
-                        visible_to_players: feature_uncloned.visible_to_players.clone(),
-                    });
-                }
-
-                server.endpoint().send_message(
-                    client_id.clone(),
-                    ServerMessages::PlayerTileInfoPacket { 
-                        tile: PlayerTileInfo {
-                            pos: tile.pos, 
-                            geography: tile.geography, 
-                            visible_features: feature
-                        } 
-                    }
-                )
-                .unwrap();
-            });
-
-            // Move client-side (only those that can see the tile on which this unit is)
-            // We need to reveal before moving, so that we can see the tile that the unit moves to
-            // We also need to make sure we despawn the unit from the client's perspective if it moves out
-            // of territory that they know about
-
-            let tile_at_unit_pos = &tiles
-                .iter()
-                .filter(|t| t.pos == self.action_pos)
-                .collect::<Vec<_>>()
-                [0];
-            
-            let visible_clients = tile_at_unit_pos
-                .visible_to_players
-                .iter()
-                .map(|t| game_manager.client_id(t, &clients.map))
-                .collect::<Vec<_>>();
-                
-            visible_clients
-                .iter()
-                .for_each(|id| { 
-                    server
-                        .endpoint()
-                        .send_message(
-                            id.clone(), 
-                            ServerMessages::UnitModifyPacket { 
-                                prev_pos: self.curr_pos, 
-                                // For some reason, `clone()` wouldn't work, so we have to do this godforsaken bullshit
-                                unit: Unit { 
-                                    id: unit.id.clone(), 
-                                    pos: unit.pos.clone(), 
-                                    health: unit.health.clone(), 
-                                    attack: unit.attack.clone(), 
-                                    defense: unit.defense.clone(), 
-                                    movement: unit.movement.clone(), 
-                                    turn_execute_stage: unit.turn_execute_stage.clone(), 
-                                    archetype: unit.archetype.clone(), 
-                                    owner: unit.owner.clone() 
-                                }
-                            }
-                        )
-                        .unwrap(); 
-                    }
-                );
-        }
-
-        // TODO: Special
-
-        else if self.action_type == UnitActions::Attack {
-            info!("ATTACK ACTION TODO")
-        }
-    }
+    pub curr_pos: Vec2,
+    pub action_pos: Vec2,
 }
 
 #[derive(Clone, Debug, Deserialize, Reflect, PartialEq, Serialize)]
@@ -301,7 +111,7 @@ pub struct UnitBundle {
 #[derive(Clone, Component, Debug, Default, Deserialize, Reflect, FromReflect, Serialize)]
 pub struct Unit {
     pub id: UnitID,
-    pub pos: [i32; 2],
+    pub pos: Vec2,
     pub health: Health,
     pub attack: Attack,
     pub defense: Defense,
@@ -310,6 +120,12 @@ pub struct Unit {
     pub archetype: Archetype,
     pub owner: PlayerTeam,
 }
+
+// impl Unit {
+//     fn pos_to_slice(&self) -> [i32; 2] {
+//         return
+//     }
+// }
 
 #[derive(Clone, Component, Debug, Default, Deserialize, FromReflect, Reflect, Serialize)]
 pub struct Health(pub f32);
@@ -334,10 +150,14 @@ pub struct Defense {
 #[derive(Clone, Component, Debug, Default, Deserialize, FromReflect, Reflect, Serialize)]
 pub struct Movement(pub i32);
 
-#[derive(Clone, Component, Debug, Default, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
+#[derive(
+    Clone, Component, Debug, Default, Deserialize, FromReflect, PartialEq, Reflect, Serialize,
+)]
 pub struct TurnExecuteStage(pub TurnExecuteStages);
 
-#[derive(Clone, Component, Debug, Default, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
+#[derive(
+    Clone, Component, Debug, Default, Deserialize, FromReflect, PartialEq, Reflect, Serialize,
+)]
 pub enum TurnExecuteStages {
     PreTurn,
     #[default]
@@ -345,15 +165,19 @@ pub enum TurnExecuteStages {
     AfterTurn,
 }
 
-#[derive(Clone, Component, Debug, Default, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
+#[derive(
+    Clone, Component, Debug, Default, Deserialize, FromReflect, PartialEq, Reflect, Serialize,
+)]
 pub struct Archetype(pub Archetypes);
 
-#[derive(Clone, Component, Debug, Default, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
+#[derive(
+    Clone, Component, Debug, Default, Deserialize, FromReflect, PartialEq, Reflect, Serialize,
+)]
 pub enum Archetypes {
     Magic,
     Science,
     #[default]
-    None
+    None,
 }
 
 #[derive(Component, Reflect, FromReflect)]
@@ -367,25 +191,39 @@ struct HealAction {
 pub struct TileFeature {
     pub pos: [i32; 2],
     pub feature: TileFeatures,
-    pub visible_to_players: Vec<PlayerTeam>
+    pub visible_to_players: Vec<PlayerTeam>,
 }
 
 #[derive(Clone, Component, Debug, Deserialize, FromReflect, PartialEq, Reflect, Serialize)]
 pub enum TileFeatures {
     CurrencySite(Archetype),
-    Nest(PlayerTeam)
+    Nest(PlayerTeam),
 }
 
-#[derive(Clone, Component, Debug, Default, Deserialize, Eq, FromReflect, Hash, PartialEq, Reflect, Serialize)]
+#[derive(
+    Clone,
+    Component,
+    Debug,
+    Default,
+    Deserialize,
+    Eq,
+    FromReflect,
+    Hash,
+    PartialEq,
+    Reflect,
+    Serialize,
+)]
 pub struct PlayerTeam(pub TeamColour);
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, FromReflect, Hash, PartialEq, Reflect, Serialize)]
+#[derive(
+    Clone, Debug, Default, Deserialize, Eq, FromReflect, Hash, PartialEq, Reflect, Serialize,
+)]
 pub enum TeamColour {
     #[default]
     Blue,
     Red,
     Purple,
-    Yellow
+    Yellow,
 }
 
 impl TeamColour {

@@ -9,7 +9,6 @@ edition = "2021"
 bevy = "0.10.0"
 bevy-inspector-egui = "0.18.1"
 bevy_fast_tilemap = "0.4.0"
-bevy_quinnet = "0.4.0"
 kayak_ui = "0.4.1"
 noise = { version = "0.8.2", features = ["images"] }
 rand = "0.8.5"

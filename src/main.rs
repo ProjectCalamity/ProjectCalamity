@@ -1,23 +1,19 @@
-mod common;
 mod client;
-mod server;
+mod common;
 
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use client::{ClientPlugin, SingleplayerPlugin};
 use common::config::{Config, RunEnvironment};
-use server::{ServerPlugin, console::ConsolePlugin};
 
 fn main() {
-
     let config = Config::load();
 
     let mut app = App::new();
     // Server startup
     match config.env {
         RunEnvironment::Singleplayer | RunEnvironment::Client => {
-            app
-                .add_plugin(ClientPlugin);
+            app.add_plugin(ClientPlugin);
             if config.debug {
                 app.add_plugin(WorldInspectorPlugin::default());
             }
@@ -25,14 +21,7 @@ fn main() {
                 app.add_plugin(SingleplayerPlugin);
             }
         }
-        RunEnvironment::Server => {
-
-            app
-                .add_plugin(ConsolePlugin)
-                .add_plugin(ServerPlugin);
-        },
+        RunEnvironment::Server => panic!("Server is currently not supported"),
     };
-    app
-        .insert_resource(config)
-        .run();
+    app.insert_resource(config).run();
 }
